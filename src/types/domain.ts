@@ -39,6 +39,11 @@ export interface EventDetail extends EventRow {
   charters: EventPerson[];
 }
 
+/** An event the signed-in charter is assigned to, with their own verification state. */
+export interface MyEvent extends EventRow {
+  verified: boolean;
+}
+
 export interface DutyHistoryItem {
   event: EventRow;
   dutyRole: DutyRole;
@@ -80,6 +85,8 @@ export interface Report {
 
   // Flattened from joins so list/detail components don't need to know about them.
   event_title: string | null;
+  event_date: string | null;
+  event_location: string | null;
   charter_name: string | null;
   team_leader_name: string | null;
   reviewed_by_name: string | null;

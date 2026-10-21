@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase";
-import type { DutyHistoryItem, EventDetail, EventPerson, EventRow } from "@/types/domain";
+import type { DutyHistoryItem, EventDetail, EventPerson, EventRow, MyEvent } from "@/types/domain";
 import type { DutyRole } from "@/types/auth";
 
 export async function countEventsInRange(start: string, end: string): Promise<number> {
@@ -92,4 +92,53 @@ export async function listDutyHistory(userId: string): Promise<DutyHistoryItem[]
     .map((row) => ({ event: row.event, dutyRole: row.duty_role }))
     .sort((a, b) => b.event.date.localeCompare(a.event.date))
     .slice(0, 50);
+}
+
+// ---------------------------------------------------------------------------
+// Charter: events assigned to the signed-in user
+// ---------------------------------------------------------------------------
+
+type RawMyEvent = EventRow & {
+  event_assignments: { verified: boolean }[];
+};
+
+function toMyEvent(raw: RawMyEvent): MyEvent {
+  const { event_assignments, ...event } = raw;
+  return { ...event, verified: event_assignments[0]?.verified ?? false };
+}
+
+const MY_EVENT_SELECT = "*, event_assignments!inner(user_id, duty_role, verified)";
+
+export interface ListMyEventsParams {
+  userId: string;
+  from?: string; // YYYY-MM-DD inclusive
+  to?: string; // YYYY-MM-DD inclusive
+  limit?: number;
+}
+
+/** Events where this user is assigned as a charter, oldest first. */
+export async function listMyEvents({ userId, from, to, limit = 100 }: ListMyEventsParams): Promise<MyEvent[]> {
+  const supabase = createClient();
+  let q = supabase
+    .from("events")
+    .select(MY_EVENT_SELECT)
+    .eq("event_assignments.user_id", userId)
+    .eq("event_assignments.duty_role", "charter")
+    .order("date", { ascending: true })
+    .order("time", { ascending: true, nullsFirst: true })
+    .limit(limit);
+  if (from) q = q.gte("date", from);
+  if (to) q = q.lte("date", to);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as unknown as RawMyEvent[]).map(toMyEvent);
+}
+
+/**
+ * Today's duty for this charter. If they somehow have two events today,
+ * a verified one wins so the Home screen and the New Report gate agree.
+ */
+export async function getTodaysDuty(userId: string, today: string): Promise<MyEvent | null> {
+  const events = await listMyEvents({ userId, from: today, to: today, limit: 5 });
+  return events.find((e) => e.verified) ?? events[0] ?? null;
 }

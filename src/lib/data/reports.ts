@@ -7,7 +7,7 @@ import type { Report, ReportStatus, VitalsReading } from "@/types/domain";
 // one we mean.
 const REPORT_SELECT = `
   *,
-  event:events(title),
+  event:events(title, date, location),
   charter:profiles!reports_charter_id_fkey(full_name),
   team_leader:profiles!reports_team_leader_id_fkey(full_name),
   reviewer:profiles!reports_reviewed_by_fkey(full_name)
@@ -16,9 +16,9 @@ const REPORT_SELECT = `
 type Named = { full_name: string | null } | null;
 type RawReport = Omit<
   Report,
-  "event_title" | "charter_name" | "team_leader_name" | "reviewed_by_name" | "vitals_readings"
+  "event_title" | "event_date" | "event_location" | "charter_name" | "team_leader_name" | "reviewed_by_name" | "vitals_readings"
 > & {
-  event: { title: string } | null;
+  event: { title: string; date: string; location: string | null } | null;
   charter: Named;
   team_leader: Named;
   reviewer: Named;
@@ -30,6 +30,8 @@ function flatten(raw: RawReport): Report {
   return {
     ...rest,
     event_title: event?.title ?? null,
+    event_date: event?.date ?? null,
+    event_location: event?.location ?? null,
     charter_name: charter?.full_name ?? null,
     team_leader_name: team_leader?.full_name ?? null,
     reviewed_by_name: reviewer?.full_name ?? null,
@@ -50,22 +52,24 @@ export async function countReports(status?: ReportStatus): Promise<number> {
 }
 
 export interface ListReportsParams {
-  status?: Exclude<ReportStatus, "draft">;
+  status?: ReportStatus;
   eventId?: string;
   charterId?: string;
   search?: string;
   limit?: number;
+  /** Drafts are only visible to their own charter (RLS); admins never see them. */
+  includeDrafts?: boolean;
 }
 
 export async function listReports(params: ListReportsParams = {}): Promise<Report[]> {
-  const { status, eventId, charterId, search, limit = 100 } = params;
+  const { status, eventId, charterId, search, limit = 100, includeDrafts = false } = params;
   const supabase = createClient();
   let q = supabase
     .from("reports")
     .select(REPORT_SELECT)
-    .neq("status", "draft")
     .order("created_at", { ascending: false })
     .limit(limit);
+  if (!includeDrafts) q = q.neq("status", "draft");
   if (status) q = q.eq("status", status);
   if (eventId) q = q.eq("event_id", eventId);
   if (charterId) q = q.eq("charter_id", charterId);
@@ -102,4 +106,90 @@ export async function saveAdminNotes(id: string, notes: string): Promise<void> {
   if (!data || data.length === 0) {
     throw new Error("Couldn't save — you may not have permission to edit this report.");
   }
+}
+
+// ---------------------------------------------------------------------------
+// Charter: submitting a report
+// ---------------------------------------------------------------------------
+
+/** One row of the vitals form. Everything is a string because it comes from inputs. */
+export interface VitalFormRow {
+  time: string; // "HH:MM"
+  temp: string;
+  pr: string;
+  rr: string;
+  bp_sys: string;
+  bp_dia: string;
+  spo2: string;
+}
+
+export interface SubmitReportInput {
+  id: string; // generated once per form, so a retry can't create a duplicate
+  eventId: string;
+  eventDate: string; // YYYY-MM-DD, used to turn "HH:MM" into a full timestamp
+  chief_complaint: string;
+  patient_name: string;
+  patient_age: string;
+  patient_sex: "M" | "F";
+  patient_address: string;
+  vitals: VitalFormRow[];
+  care_given: string;
+  signaturePath: string;
+}
+
+const num = (v: string): number | null => {
+  const n = Number(v);
+  return v.trim() !== "" && Number.isFinite(n) ? n : null;
+};
+
+/**
+ * Saves the report and its vitals in one transaction via the submit_report()
+ * database function. The database refuses it unless this charter is verified
+ * for an event happening today.
+ */
+export async function submitReport(input: SubmitReportInput): Promise<string> {
+  const supabase = createClient();
+
+  // Team Leader on duty for this event (first one if there are several).
+  const { data: leaders, error: leaderError } = await supabase
+    .from("event_assignments")
+    .select("user_id")
+    .eq("event_id", input.eventId)
+    .eq("duty_role", "team_leader")
+    .limit(1);
+  if (leaderError) throw new Error(leaderError.message);
+
+  const vitals = input.vitals.map((v) => ({
+    // "14:30" on the event's date, in the browser's local time zone -> UTC timestamp
+    time_taken: new Date(`${input.eventDate}T${v.time}`).toISOString(),
+    temp: num(v.temp),
+    pr: num(v.pr),
+    rr: num(v.rr),
+    bp_systolic: num(v.bp_sys),
+    bp_diastolic: num(v.bp_dia),
+    spo2: num(v.spo2),
+  }));
+
+  const { data, error } = await supabase.rpc("submit_report", {
+    p_report: {
+      id: input.id,
+      event_id: input.eventId,
+      team_leader_id: leaders?.[0]?.user_id ?? null,
+      chief_complaint: input.chief_complaint.trim(),
+      patient_name: input.patient_name.trim(),
+      age: num(input.patient_age),
+      sex: input.patient_sex,
+      address: input.patient_address.trim(),
+      care_given: input.care_given.trim(),
+      signature_url: input.signaturePath,
+    },
+    p_vitals: vitals,
+  });
+  if (error) {
+    if (error.code === "42501" || /row-level security/i.test(error.message)) {
+      throw new Error("You need Team Leader approval for today's duty before you can chart.");
+    }
+    throw new Error(error.message);
+  }
+  return data as string;
 }
