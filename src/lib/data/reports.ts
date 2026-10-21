@@ -137,10 +137,20 @@ export interface SubmitReportInput {
   signaturePath: string;
 }
 
-const num = (v: string): number | null => {
-  const n = Number(v);
-  return v.trim() !== "" && Number.isFinite(n) ? n : null;
-};
+/**
+ * Empty -> null. Otherwise it must be a real number (a decimal comma is accepted,
+ * "36,5" -> 36.5) or we stop and say which field, instead of quietly saving blank
+ * patient data.
+ */
+function parseNumber(value: string, label: string, opts: { int?: boolean } = {}): number | null {
+  const text = value.trim().replace(",", ".");
+  if (text === "") return null;
+  const n = Number(text);
+  if (!Number.isFinite(n) || (opts.int && !Number.isInteger(n))) {
+    throw new Error(`${label} must be a ${opts.int ? "whole " : ""}number (you entered "${value}").`);
+  }
+  return n;
+}
 
 /**
  * Saves the report and its vitals in one transaction via the submit_report()
@@ -159,16 +169,23 @@ export async function submitReport(input: SubmitReportInput): Promise<string> {
     .limit(1);
   if (leaderError) throw new Error(leaderError.message);
 
-  const vitals = input.vitals.map((v) => ({
-    // "14:30" on the event's date, in the browser's local time zone -> UTC timestamp
-    time_taken: new Date(`${input.eventDate}T${v.time}`).toISOString(),
-    temp: num(v.temp),
-    pr: num(v.pr),
-    rr: num(v.rr),
-    bp_systolic: num(v.bp_sys),
-    bp_diastolic: num(v.bp_dia),
-    spo2: num(v.spo2),
-  }));
+  const age = parseNumber(input.patient_age, "Age", { int: true });
+
+  const vitals = input.vitals.map((v, i) => {
+    const where = `Vitals check ${i + 1}`;
+    const taken = new Date(`${input.eventDate}T${v.time}`);
+    if (Number.isNaN(taken.getTime())) throw new Error(`${where}: the time isn't valid.`);
+    return {
+      // "14:30" on the event's date, in the browser's local time zone -> UTC timestamp
+      time_taken: taken.toISOString(),
+      temp: parseNumber(v.temp, `${where} temperature`),
+      pr: parseNumber(v.pr, `${where} pulse rate`, { int: true }),
+      rr: parseNumber(v.rr, `${where} respiratory rate`, { int: true }),
+      bp_systolic: parseNumber(v.bp_sys, `${where} systolic BP`, { int: true }),
+      bp_diastolic: parseNumber(v.bp_dia, `${where} diastolic BP`, { int: true }),
+      spo2: parseNumber(v.spo2, `${where} SpO₂`, { int: true }),
+    };
+  });
 
   const { data, error } = await supabase.rpc("submit_report", {
     p_report: {
@@ -177,7 +194,7 @@ export async function submitReport(input: SubmitReportInput): Promise<string> {
       team_leader_id: leaders?.[0]?.user_id ?? null,
       chief_complaint: input.chief_complaint.trim(),
       patient_name: input.patient_name.trim(),
-      age: num(input.patient_age),
+      age,
       sex: input.patient_sex,
       address: input.patient_address.trim(),
       care_given: input.care_given.trim(),
