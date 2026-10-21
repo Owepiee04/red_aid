@@ -42,10 +42,11 @@ function flatten(raw: RawReport): Report {
 }
 
 /** Count of reports the admin can see (drafts are hidden by RLS). */
-export async function countReports(status?: ReportStatus): Promise<number> {
+export async function countReports(status?: ReportStatus, eventId?: string): Promise<number> {
   const supabase = createClient();
   let q = supabase.from("reports").select("id", { count: "exact", head: true });
   if (status) q = q.eq("status", status);
+  if (eventId) q = q.eq("event_id", eventId);
   const { count, error } = await q;
   if (error) throw new Error(error.message);
   return count ?? 0;
@@ -54,6 +55,8 @@ export async function countReports(status?: ReportStatus): Promise<number> {
 export interface ListReportsParams {
   status?: ReportStatus;
   eventId?: string;
+  /** Only reports from these events (e.g. the duties a Team Leader leads). */
+  eventIds?: string[];
   charterId?: string;
   search?: string;
   limit?: number;
@@ -62,7 +65,8 @@ export interface ListReportsParams {
 }
 
 export async function listReports(params: ListReportsParams = {}): Promise<Report[]> {
-  const { status, eventId, charterId, search, limit = 100, includeDrafts = false } = params;
+  const { status, eventId, eventIds, charterId, search, limit = 100, includeDrafts = false } = params;
+  if (eventIds && eventIds.length === 0) return []; // .in() with an empty list is an error
   const supabase = createClient();
   let q = supabase
     .from("reports")
@@ -72,6 +76,7 @@ export async function listReports(params: ListReportsParams = {}): Promise<Repor
   if (!includeDrafts) q = q.neq("status", "draft");
   if (status) q = q.eq("status", status);
   if (eventId) q = q.eq("event_id", eventId);
+  if (eventIds) q = q.in("event_id", eventIds);
   if (charterId) q = q.eq("charter_id", charterId);
   const term = search ? sanitizeSearch(search) : "";
   if (term) q = q.ilike("patient_name", `%${term}%`);
@@ -209,4 +214,18 @@ export async function submitReport(input: SubmitReportInput): Promise<string> {
     throw new Error(error.message);
   }
   return data as string;
+}
+
+// ---------------------------------------------------------------------------
+// Team Leader: reviewing a report
+// ---------------------------------------------------------------------------
+
+/**
+ * Marks a submitted report as reviewed. The database function checks that you
+ * lead this report's event and records who reviewed it and when.
+ */
+export async function reviewReport(id: string, notes: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc("review_report", { p_report: id, p_notes: notes });
+  if (error) throw new Error(error.message);
 }

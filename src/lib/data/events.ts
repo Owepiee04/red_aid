@@ -111,19 +111,21 @@ const MY_EVENT_SELECT = "*, event_assignments!inner(user_id, duty_role, verified
 
 export interface ListMyEventsParams {
   userId: string;
+  /** Which side of the duty: events you chart on (default) or events you lead. */
+  dutyRole?: DutyRole;
   from?: string; // YYYY-MM-DD inclusive
   to?: string; // YYYY-MM-DD inclusive
   limit?: number;
 }
 
 /** Events where this user is assigned as a charter, oldest first. */
-export async function listMyEvents({ userId, from, to, limit = 100 }: ListMyEventsParams): Promise<MyEvent[]> {
+export async function listMyEvents({ userId, dutyRole = "charter", from, to, limit = 100 }: ListMyEventsParams): Promise<MyEvent[]> {
   const supabase = createClient();
   let q = supabase
     .from("events")
     .select(MY_EVENT_SELECT)
     .eq("event_assignments.user_id", userId)
-    .eq("event_assignments.duty_role", "charter")
+    .eq("event_assignments.duty_role", dutyRole)
     .order("date", { ascending: true })
     .order("time", { ascending: true, nullsFirst: true })
     .limit(limit);
@@ -138,7 +140,29 @@ export async function listMyEvents({ userId, from, to, limit = 100 }: ListMyEven
  * Today's duty for this charter. If they somehow have two events today,
  * a verified one wins so the Home screen and the New Report gate agree.
  */
-export async function getTodaysDuty(userId: string, today: string): Promise<MyEvent | null> {
-  const events = await listMyEvents({ userId, from: today, to: today, limit: 5 });
+export async function getTodaysDuty(
+  userId: string,
+  today: string,
+  dutyRole: DutyRole = "charter"
+): Promise<MyEvent | null> {
+  const events = await listMyEvents({ userId, dutyRole, from: today, to: today, limit: 5 });
   return events.find((e) => e.verified) ?? events[0] ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Team Leader: approving charters
+// ---------------------------------------------------------------------------
+
+/**
+ * Approve (true) or revoke (false) one charter for one event. The database
+ * function checks that you lead the event and that it isn't already over.
+ */
+export async function setCharterVerified(eventId: string, userId: string, verified: boolean): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc("set_charter_verified", {
+    p_event: eventId,
+    p_user: userId,
+    p_verified: verified,
+  });
+  if (error) throw new Error(error.message);
 }
