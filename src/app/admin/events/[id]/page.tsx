@@ -107,7 +107,13 @@ export default function EventDetailPage() {
         </SectionCard>
       </div>
 
-      <EventFormDialog open={editOpen} onOpenChange={setEditOpen} event={event} onSaved={load} />
+      <EventFormDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        event={event}
+        onSaved={load}
+        onDeleted={() => router.push("/admin/calendar")}
+      />
     </div>
   );
 }

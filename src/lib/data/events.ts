@@ -166,3 +166,58 @@ export async function setCharterVerified(eventId: string, userId: string, verifi
   });
   if (error) throw new Error(error.message);
 }
+
+// ---------------------------------------------------------------------------
+// Admin: creating, editing and deleting events
+// ---------------------------------------------------------------------------
+
+export interface SaveEventInput {
+  /** Omit to create a new event. */
+  id?: string;
+  title: string;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:mm
+  location: string;
+  description: string;
+  teamLeaderIds: string[];
+  charterIds: string[];
+}
+
+/**
+ * Saves the event and its assigned people in one step (database function
+ * save_event). People who stay on the event keep their approval state.
+ */
+export async function saveEvent(input: SaveEventInput): Promise<string> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("save_event", {
+    p_id: input.id ?? null,
+    p_event: {
+      title: input.title,
+      date: input.date,
+      time: input.time,
+      location: input.location,
+      description: input.description,
+    },
+    p_team_leaders: input.teamLeaderIds,
+    p_charters: input.charterIds,
+  });
+  if (error) throw new Error(error.message);
+  return data as string;
+}
+
+export async function deleteEvent(id: string): Promise<void> {
+  const supabase = createClient();
+  const { data, error } = await supabase.from("events").delete().eq("id", id).select("id");
+  if (error) {
+    // 23503 = foreign key violation: patient reports still point at this event.
+    if (error.code === "23503") {
+      throw new Error(
+        "This event already has patient reports, so it can't be deleted. Patient records are kept."
+      );
+    }
+    throw new Error(error.message);
+  }
+  if (!data || data.length === 0) {
+    throw new Error("Couldn't delete the event — it may already be gone, or you may not have permission.");
+  }
+}
