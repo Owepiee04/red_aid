@@ -1,6 +1,6 @@
 import StatusBadge from "@/components/StatusBadge";
 import type { ReportColumn } from "@/components/ReportList";
-import { fmtDate } from "@/lib/formatting";
+import { submittedStamp } from "@/lib/formatting";
 import type { Report } from "@/types/domain";
 
 const patient = (row: Report) => <span className="font-medium">{row.patient_name || "—"}</span>;
@@ -12,7 +12,7 @@ export const adminReportColumns = (): ReportColumn[] => [
   { key: "charter_name", label: "Charter" },
   { key: "team_leader_name", label: "Team Leader" },
   { key: "status", label: "Status", render: statusBadge },
-  { key: "created_at", label: "Date Submitted", render: (row) => fmtDate(row.created_at) },
+  { key: "submitted_at", label: "Submitted", render: (row) => submittedStamp(row) ?? "—" },
 ];
 
 export const dashboardReportColumns = (): ReportColumn[] => [
@@ -20,7 +20,7 @@ export const dashboardReportColumns = (): ReportColumn[] => [
   { key: "event_title", label: "Event" },
   { key: "charter_name", label: "Charter" },
   { key: "status", label: "Status", render: statusBadge },
-  { key: "created_at", label: "Date", render: (row) => fmtDate(row.created_at, "MMM D") },
+  { key: "submitted_at", label: "Submitted", render: (row) => submittedStamp(row, "MMM D, h:mm A") ?? "—" },
 ];
 
 export const dutyReportColumns = (): ReportColumn[] => [
@@ -28,5 +28,5 @@ export const dutyReportColumns = (): ReportColumn[] => [
   { key: "charter_name", label: "Charter" },
   { key: "event_title", label: "Event" },
   { key: "status", label: "Status", render: statusBadge },
-  { key: "created_at", label: "Time", render: (row) => fmtDate(row.created_at, "MMM D, h:mm A") },
+  { key: "submitted_at", label: "Submitted", render: (row) => submittedStamp(row, "MMM D, h:mm A") ?? "—" },
 ];

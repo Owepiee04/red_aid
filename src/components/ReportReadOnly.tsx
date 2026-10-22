@@ -1,7 +1,8 @@
+import { Clock } from "lucide-react";
 import SectionCard from "@/components/SectionCard";
 import VitalsTable from "@/components/VitalsTable";
 import SignatureImage from "@/components/SignatureImage";
-import { fmtDate } from "@/lib/formatting";
+import { fmtDate, submittedStamp } from "@/lib/formatting";
 import type { Report } from "@/types/domain";
 
 function InfoRow({ label, value }: { label: string; value: string | number | null | undefined }) {
@@ -18,6 +19,7 @@ function InfoRow({ label, value }: { label: string; value: string | number | nul
 /** The patient care report exactly as charted — read only for every role. */
 export default function ReportReadOnly({ report }: { report: Report | null | undefined }) {
   if (!report) return null;
+  const submitted = submittedStamp(report);
 
   return (
     <div className="space-y-5">
@@ -32,6 +34,10 @@ export default function ReportReadOnly({ report }: { report: Report | null | und
             {report.event_location ? ` · ${report.event_location}` : ""}
           </p>
         </div>
+        <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+          {submitted ? `Submitted ${submitted}` : "Draft · not submitted yet"}
+        </p>
         <div className="mt-4 border-t border-border/70 pt-4">
           <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Chief complaint</p>
           <p className="mt-1 whitespace-pre-wrap text-sm">{report.chief_complaint || "—"}</p>
