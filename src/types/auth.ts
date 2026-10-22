@@ -15,4 +15,8 @@ export interface AppUser {
   full_name?: string | null;
   role: PlatformRole;
   duty_role?: DutyRole | null;
+  /** false when an Admin has deactivated the account. */
+  active?: boolean;
+  /** Storage path in the private `avatars` bucket (or a full URL). */
+  photo_url?: string | null;
 }

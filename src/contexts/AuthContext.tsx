@@ -32,7 +32,7 @@ async function loadProfile(
 ): Promise<AppUser | null> {
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, email, full_name, role, duty_role")
+    .select("id, email, full_name, role, duty_role, active, photo_url")
     .eq("id", session.user.id)
     .single();
 
