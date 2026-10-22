@@ -12,6 +12,7 @@ import EmptyState from "@/components/EmptyState";
 import LoadingState from "@/components/LoadingState";
 import EventFormDialog from "@/components/EventFormDialog";
 import EndDutyControl from "@/components/EndDutyControl";
+import ExportEventButton from "@/components/ExportEventButton";
 import { useData } from "@/lib/useData";
 import { fmtDateLong, fmtDateTimeStamp, fmtTime } from "@/lib/formatting";
 import { getEvent } from "@/lib/data/events";
@@ -36,6 +37,7 @@ export default function EventDetailPage() {
         description={`${fmtDateLong(event.date)} · ${fmtTime(event.time)}`}
         actions={
           <>
+            <ExportEventButton event={event} />
             <EndDutyControl event={event} onChanged={load} />
             <Button variant="outline" onClick={() => setEditOpen(true)}>
               <Pencil className="mr-2 h-4 w-4" />
