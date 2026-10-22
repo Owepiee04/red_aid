@@ -22,6 +22,9 @@ export interface EventRow {
   location: string | null;
   description: string | null;
   created_by: string | null;
+  /** When a Team Leader/Admin ended the duty. null = still open. */
+  ended_at: string | null;
+  ended_by: string | null;
   created_at: string;
   updated_at: string;
 }

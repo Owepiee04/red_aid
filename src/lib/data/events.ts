@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase";
 import type { DutyHistoryItem, EventDetail, EventPerson, EventRow, MyEvent } from "@/types/domain";
 import type { DutyRole } from "@/types/auth";
+import { isChartingOpen } from "@/lib/duty";
 
 export async function countEventsInRange(start: string, end: string): Promise<number> {
   const supabase = createClient();
@@ -137,8 +138,9 @@ export async function listMyEvents({ userId, dutyRole = "charter", from, to, lim
 }
 
 /**
- * Today's duty for this charter. If they somehow have two events today,
- * a verified one wins so the Home screen and the New Report gate agree.
+ * Today's duty for this charter. If they somehow have two events today, one they
+ * can chart on right now wins, then any approved one, so the Home screen and the
+ * New Report gate agree.
  */
 export async function getTodaysDuty(
   userId: string,
@@ -146,7 +148,7 @@ export async function getTodaysDuty(
   dutyRole: DutyRole = "charter"
 ): Promise<MyEvent | null> {
   const events = await listMyEvents({ userId, dutyRole, from: today, to: today, limit: 5 });
-  return events.find((e) => e.verified) ?? events[0] ?? null;
+  return events.find((e) => isChartingOpen(e)) ?? events.find((e) => e.verified) ?? events[0] ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -220,4 +222,24 @@ export async function deleteEvent(id: string): Promise<void> {
   if (!data || data.length === 0) {
     throw new Error("Couldn't delete the event — it may already be gone, or you may not have permission.");
   }
+}
+
+// ---------------------------------------------------------------------------
+// Team Leader / Admin: ending and reopening a duty
+// ---------------------------------------------------------------------------
+
+/**
+ * Ends the duty: charters can no longer start charting once the grace period
+ * (see src/lib/duty.ts) has passed. Approvals are kept, so reopening restores access.
+ */
+export async function endEvent(eventId: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc("end_event", { p_event: eventId });
+  if (error) throw new Error(error.message);
+}
+
+export async function reopenEvent(eventId: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc("reopen_event", { p_event: eventId });
+  if (error) throw new Error(error.message);
 }

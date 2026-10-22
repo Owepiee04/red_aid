@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Clock, Plus, ShieldAlert } from "lucide-react";
+import { CheckCircle2, Clock, Lock, Plus, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import PageHeader from "@/components/PageHeader";
 import SectionCard from "@/components/SectionCard";
@@ -12,7 +12,8 @@ import LoadingState from "@/components/LoadingState";
 import EmptyState from "@/components/EmptyState";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/lib/useData";
-import { fmtTime, todayISO } from "@/lib/formatting";
+import { chartingClosesAt, isChartingOpen } from "@/lib/duty";
+import { fmtDate, fmtTime, todayISO } from "@/lib/formatting";
 import { getTodaysDuty, listMyEvents } from "@/lib/data/events";
 import { listReports } from "@/lib/data/reports";
 
@@ -29,7 +30,7 @@ export default function CharterHomePage() {
       listMyEvents({ userId, from: today, limit: 5 }),
       listReports({ charterId: userId, includeDrafts: true, limit: 5 }),
     ]);
-    return { duty, verified: duty?.verified ?? false, upcoming, recent };
+    return { duty, upcoming, recent };
   }, [userId]);
 
   if (!data && loading) return <LoadingState />;
@@ -37,7 +38,47 @@ export default function CharterHomePage() {
     return <EmptyState title="Couldn't load your dashboard" description={error ?? "Please try again."} />;
   }
 
-  const { duty, verified, upcoming, recent } = data;
+  const { duty, upcoming, recent } = data;
+
+  // none     = nothing assigned today
+  // ended    = the Team Leader ended the duty (and any grace period is over, or you weren't approved)
+  // approved = you can chart (including the grace period right after the duty was ended)
+  // waiting  = assigned, but the Team Leader hasn't approved you yet
+  const canChart = duty ? isChartingOpen(duty) : false;
+  const state = !duty ? "none" : canChart ? "approved" : duty.ended_at ? "ended" : "waiting";
+  const closesAt = duty ? chartingClosesAt(duty) : null;
+  const dutyLine = duty
+    ? `${duty.title} · ${fmtTime(duty.time)}${duty.location ? ` · ${duty.location}` : ""}`
+    : "";
+
+  const BANNER = {
+    none: {
+      box: "border-border bg-card shadow-sm",
+      icon: <Clock className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />,
+      title: "No duty today",
+      body: "You have no event assigned to you today.",
+    },
+    waiting: {
+      box: "border-amber-200 bg-amber-50",
+      icon: <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />,
+      title: "Waiting for Team Leader approval",
+      body: "You'll be able to chart once your Team Leader verifies you for this duty.",
+    },
+    approved: {
+      box: "border-emerald-200 bg-emerald-50",
+      icon: <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />,
+      title: "Approved — you can chart",
+      body: closesAt
+        ? `${dutyLine}. Your Team Leader has ended this duty — charting closes at ${fmtDate(closesAt, "h:mm A")}.`
+        : dutyLine,
+    },
+    ended: {
+      box: "border-border bg-muted/60",
+      icon: <Lock className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />,
+      title: "Duty ended",
+      body: `${duty?.title ?? "This duty"} has been ended by your Team Leader, so new reports can't be added.`,
+    },
+  }[state];
 
   return (
     <div>
@@ -47,41 +88,15 @@ export default function CharterHomePage() {
       />
 
       <div className="space-y-5">
-        <div
-          className={
-            !duty
-              ? "flex items-start gap-3 rounded-2xl border border-border bg-card p-5 shadow-sm"
-              : verified
-                ? "flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-5"
-                : "flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-5"
-          }
-        >
-          {!duty ? (
-            <Clock className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
-          ) : verified ? (
-            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
-          ) : (
-            <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-          )}
+        <div className={`flex items-start gap-3 rounded-2xl border p-5 ${BANNER.box}`}>
+          {BANNER.icon}
           <div>
-            <p className="font-heading text-base font-semibold">
-              {!duty
-                ? "No duty today"
-                : verified
-                  ? "Approved — you can chart"
-                  : "Waiting for Team Leader approval"}
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {!duty
-                ? "You have no event assigned to you today."
-                : verified
-                  ? `${duty.title} · ${fmtTime(duty.time)}${duty.location ? ` · ${duty.location}` : ""}`
-                  : "You'll be able to chart once your Team Leader verifies you for this duty."}
-            </p>
+            <p className="font-heading text-base font-semibold">{BANNER.title}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{BANNER.body}</p>
           </div>
         </div>
 
-        {verified ? (
+        {canChart ? (
           <Button asChild size="lg" className="w-full sm:w-auto">
             <Link href="/charter/report/new">
               <Plus className="mr-2 h-5 w-5" />

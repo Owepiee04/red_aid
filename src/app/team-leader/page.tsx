@@ -10,6 +10,7 @@ import UserAvatar from "@/components/UserAvatar";
 import EventCard from "@/components/EventCard";
 import LoadingState from "@/components/LoadingState";
 import EmptyState from "@/components/EmptyState";
+import EndDutyControl from "@/components/EndDutyControl";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/lib/useData";
 import { fmtDate, fmtTime, todayISO } from "@/lib/formatting";
@@ -20,7 +21,7 @@ export default function TeamLeaderDashboardPage() {
   const { user } = useAuth();
   const userId = user?.id;
 
-  const { data, loading, error } = useData(async () => {
+  const { data, loading, error, load } = useData(async () => {
     if (!userId) return null;
     const today = todayISO();
     const todaysDuty = await getTodaysDuty(userId, today, "team_leader");
@@ -54,12 +55,13 @@ export default function TeamLeaderDashboardPage() {
 
       <div className="space-y-5">
         <SectionCard
-          title={duty ? "On duty today" : "No duty today"}
+          title={duty ? (duty.ended_at ? "Duty ended" : "On duty today") : "No duty today"}
           subtitle={
             duty
               ? `${fmtDate(duty.date, "dddd, MMM D")} · ${fmtTime(duty.time)}`
               : "You have no event scheduled for today."
           }
+          action={duty ? <EndDutyControl event={duty} onChanged={load} /> : undefined}
         >
           {duty ? (
             <div className="rounded-xl bg-accent/60 p-4">
@@ -70,6 +72,11 @@ export default function TeamLeaderDashboardPage() {
                 {fmtTime(duty.time)}
                 {duty.location ? ` · ${duty.location}` : ""}
               </p>
+              {duty.ended_at && (
+                <p className="mt-2 text-sm font-medium text-accent-foreground">
+                  Duty ended at {fmtDate(duty.ended_at, "h:mm A")} — charters can no longer chart.
+                </p>
+              )}
             </div>
           ) : nextDuty ? (
             <div>

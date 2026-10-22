@@ -16,6 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/lib/useData";
 import { fmtTime, todayISO } from "@/lib/formatting";
 import { getTodaysDuty } from "@/lib/data/events";
+import { isChartingOpen } from "@/lib/duty";
 import { submitReport } from "@/lib/data/reports";
 import { uploadSignature } from "@/lib/storage";
 import type { PatientForm, VitalForm } from "@/types/report-form";
@@ -46,18 +47,18 @@ export default function NewReportPage() {
   const reportId = useRef<string>("");
   if (!reportId.current) reportId.current = crypto.randomUUID();
 
-  // Only a duty the charter is VERIFIED for lets them chart.
+  // Only a duty the charter is verified for — and that hasn't been ended — lets them chart.
   const { data: duty, loading } = useData(async () => {
     if (!userId) return null;
     const event = await getTodaysDuty(userId, todayISO());
-    return event?.verified ? event : null;
+    return event && isChartingOpen(event) ? event : null;
   }, [userId]);
 
   const redirected = useRef(false);
   useEffect(() => {
     if (loading || duty || redirected.current) return;
     redirected.current = true;
-    toast({ title: "You need Team Leader approval before charting." });
+    toast({ title: "Charting isn't open — you need Team Leader approval for a duty that hasn't ended." });
     router.replace("/charter");
   }, [loading, duty, toast, router]);
 

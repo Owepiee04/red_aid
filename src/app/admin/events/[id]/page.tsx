@@ -11,8 +11,9 @@ import UserAvatar from "@/components/UserAvatar";
 import EmptyState from "@/components/EmptyState";
 import LoadingState from "@/components/LoadingState";
 import EventFormDialog from "@/components/EventFormDialog";
+import EndDutyControl from "@/components/EndDutyControl";
 import { useData } from "@/lib/useData";
-import { fmtDateLong, fmtTime } from "@/lib/formatting";
+import { fmtDateLong, fmtDateTimeStamp, fmtTime } from "@/lib/formatting";
 import { getEvent } from "@/lib/data/events";
 
 export default function EventDetailPage() {
@@ -34,10 +35,13 @@ export default function EventDetailPage() {
         title={event.title}
         description={`${fmtDateLong(event.date)} · ${fmtTime(event.time)}`}
         actions={
-          <Button variant="outline" onClick={() => setEditOpen(true)}>
-            <Pencil className="mr-2 h-4 w-4" />
-            Edit Event
-          </Button>
+          <>
+            <EndDutyControl event={event} onChanged={load} />
+            <Button variant="outline" onClick={() => setEditOpen(true)}>
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit Event
+            </Button>
+          </>
         }
       />
 
@@ -55,6 +59,12 @@ export default function EventDetailPage() {
             <div>
               <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Location</dt>
               <dd className="mt-0.5 text-sm font-medium">{event.location || "—"}</dd>
+            </div>
+            <div className="col-span-2 sm:col-span-4">
+              <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Duty status</dt>
+              <dd className="mt-0.5 text-sm font-medium">
+                {event.ended_at ? `Ended ${fmtDateTimeStamp(event.ended_at)}` : "Open"}
+              </dd>
             </div>
             <div className="col-span-2 sm:col-span-4">
               <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Description</dt>

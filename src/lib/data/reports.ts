@@ -209,7 +209,9 @@ export async function submitReport(input: SubmitReportInput): Promise<string> {
   });
   if (error) {
     if (error.code === "42501" || /row-level security/i.test(error.message)) {
-      throw new Error("You need Team Leader approval for today's duty before you can chart.");
+      throw new Error(
+        "Charting isn't open for you on this duty. You need Team Leader approval, and the duty must not have been ended."
+      );
     }
     throw new Error(error.message);
   }
