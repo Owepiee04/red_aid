@@ -98,6 +98,26 @@ export async function getReport(id: string): Promise<Report | null> {
   return data ? flatten(data as unknown as RawReport) : null;
 }
 
+/**
+ * Every submitted / reviewed report of one event, with its vitals, for the Excel
+ * export. Drafts are left out (admins can't see them anyway). Oldest first, so the
+ * spreadsheet reads in the order patients were seen.
+ * Supabase returns at most 1000 rows per request by default; an event with more
+ * reports than that would need paging.
+ */
+export async function listReportsForExport(eventId: string): Promise<Report[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("reports")
+    .select(`${REPORT_SELECT}, vitals_readings(*)`)
+    .eq("event_id", eventId)
+    .neq("status", "draft")
+    .order("created_at", { ascending: true })
+    .limit(1000);
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as unknown as RawReport[]).map(flatten);
+}
+
 export async function saveAdminNotes(id: string, notes: string): Promise<void> {
   const supabase = createClient();
   // .select() so a policy that silently blocks the update shows up as 0 rows
