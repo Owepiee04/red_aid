@@ -10,7 +10,7 @@ import SectionCard from "@/components/SectionCard";
 import LoadingState from "@/components/LoadingState";
 import StepIndicator from "@/components/report/StepIndicator";
 import StepPatient from "@/components/report/StepPatient";
-import StepVitals, { emptyVital } from "@/components/report/StepVitals";
+import StepVitals, { emptyVital, hasMeasurements } from "@/components/report/StepVitals";
 import StepCare from "@/components/report/StepCare";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/lib/useData";
@@ -76,9 +76,9 @@ export default function NewReportPage() {
     patient.patient_age !== "" &&
     patient.patient_address.trim() !== "";
 
-  const stepTwoComplete = vitals.every(
-    (v) => v.time && v.temp && v.pr && v.rr && v.bp_sys && v.bp_dia && v.spo2
-  );
+  // Vitals are optional: a check can be left blank or partly filled. The only rule
+  // is that a check with any measurement in it needs a time.
+  const stepTwoComplete = vitals.every((v) => !hasMeasurements(v) || v.time !== "");
 
   const stepThreeComplete = care.trim() !== "" && signature !== null;
 
@@ -92,7 +92,7 @@ export default function NewReportPage() {
         eventId: duty.id,
         eventDate: duty.date,
         ...patient,
-        vitals,
+        vitals: vitals.filter(hasMeasurements), // blank checks aren't saved
         care_given: care,
         signaturePath,
       });
@@ -130,7 +130,7 @@ export default function NewReportPage() {
       </div>
 
       <SectionCard
-        title={step === 1 ? "Patient & complaint" : step === 2 ? "Vitals" : "Care given & signature"}
+        title={step === 1 ? "Patient & complaint" : step === 2 ? "Vitals (optional)" : "Care given & signature"}
       >
         {step === 1 && <StepPatient value={patient} onChange={setPatient} eventLabel={duty.title} />}
         {step === 2 && <StepVitals vitals={vitals} onChange={setVitals} />}
