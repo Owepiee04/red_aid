@@ -1,4 +1,4 @@
-import { Plus, X } from "lucide-react";
+import { Info, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,12 @@ export const emptyVital = (): VitalForm => ({
   bp_dia: "",
   spo2: "",
 });
+
+const MEASUREMENTS = ["temp", "pr", "rr", "bp_sys", "bp_dia", "spo2"] as const;
+
+/** True when at least one measurement was entered (the time alone doesn't count). */
+export const hasMeasurements = (vital: VitalForm): boolean =>
+  MEASUREMENTS.some((field) => vital[field].trim() !== "");
 
 interface TextFieldProps {
   label: string;
@@ -55,22 +61,32 @@ export default function StepVitals({ vitals, onChange }: StepVitalsProps) {
 
   return (
     <div className="space-y-4">
+      <p className="flex gap-2 rounded-xl bg-muted/60 p-3 text-xs text-muted-foreground">
+        <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+        <span>
+          Vitals are optional. For a minor case, like a small scrape, you can leave them blank and
+          tap Next. Fill in only what you measured; empty checks aren&apos;t saved.
+        </span>
+      </p>
+
+      {vitals.length === 0 && (
+        <p className="py-2 text-center text-sm text-muted-foreground">No vitals recorded for this patient.</p>
+      )}
+
       {vitals.map((vital, index) => (
         // Rows have no id and can be removed from the middle; index keys are
         // fine here because every field is controlled by `vitals`.
         <div key={index} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="font-heading text-sm font-semibold">Vitals check {index + 1}</p>
-            {index > 0 && (
-              <button
-                type="button"
-                onClick={() => remove(index)}
-                aria-label="Remove this vitals check"
-                className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => remove(index)}
+              aria-label="Remove this vitals check"
+              className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -128,7 +144,7 @@ export default function StepVitals({ vitals, onChange }: StepVitalsProps) {
 
       <Button type="button" variant="outline" onClick={add} className="w-full border-dashed">
         <Plus className="mr-2 h-4 w-4" />
-        Add Another Vitals Check
+        {vitals.length === 0 ? "Add Vitals Check" : "Add Another Vitals Check"}
       </Button>
     </div>
   );
