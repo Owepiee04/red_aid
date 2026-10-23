@@ -23,21 +23,39 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 // Supabase Auth only knows the email/password identity (`auth.users`).
-// Everything app-specific — role, duty_role, full_name — lives in a
-// `profiles` table keyed by the same user id, so every auth change has to
-// be followed by a fetch of that row before `user` is usable.
+// Everything app-specific — name, photo, platform admin flag and default duty
+// role — lives in `users`, keyed by the same user id.
+interface UserRow {
+  id: string;
+  first_name: string;
+  last_name: string;
+  pfp_img_url: string | null;
+  is_admin: boolean;
+  duty_role: "team_leader" | "charter";
+  is_active: boolean;
+}
+
 async function loadProfile(
   supabase: SupabaseClient,
   session: Session
 ): Promise<AppUser | null> {
   const { data, error } = await supabase
-    .from("profiles")
-    .select("id, email, full_name, role, duty_role")
+    .from("users")
+    .select("id, first_name, last_name, pfp_img_url, is_admin, duty_role, is_active")
     .eq("id", session.user.id)
-    .single();
+    .maybeSingle();
 
   if (error || !data) return null;
-  return data as AppUser;
+  const row = data as UserRow;
+  return {
+    id: row.id,
+    email: session.user.email ?? "",
+    full_name: `${row.first_name ?? ""} ${row.last_name ?? ""}`.trim() || null,
+    role: row.is_admin ? "admin" : "user",
+    duty_role: row.duty_role,
+    active: row.is_active,
+    photo_url: row.pfp_img_url,
+  };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {

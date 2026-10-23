@@ -1,7 +1,7 @@
 import { ChevronRight, ClipboardList } from "lucide-react";
 import StatusBadge from "@/components/StatusBadge";
 import EmptyState from "@/components/EmptyState";
-import { fmtDate } from "@/lib/formatting";
+import { submittedStamp } from "@/lib/formatting";
 import type { Report } from "@/types/domain";
 
 interface ReportCardListProps {
@@ -44,7 +44,11 @@ export default function ReportCardList({
             </span>
             <span className="mt-2 flex items-center gap-2">
               <StatusBadge status={report.status} />
-              <span className="text-xs text-muted-foreground">{fmtDate(report.created_at)}</span>
+              <span className="text-xs text-muted-foreground">
+                {report.status === "draft"
+                  ? "Not submitted yet"
+                  : `Submitted ${submittedStamp(report, "MMM D, YYYY · h:mm A")}`}
+              </span>
             </span>
           </span>
           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />

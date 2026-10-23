@@ -10,6 +10,7 @@ import SectionCard from "@/components/SectionCard";
 import StatusBadge from "@/components/StatusBadge";
 import UserAvatar from "@/components/UserAvatar";
 import EmptyState from "@/components/EmptyState";
+import EndDutyControl from "@/components/EndDutyControl";
 import LoadingState from "@/components/LoadingState";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/lib/useData";
@@ -88,18 +89,23 @@ function VerifyChartersContent() {
   }
 
   const isOver = event.date < todayISO();
+  const isEnded = event.ended_at !== null;
+  const locked = isOver || isEnded; // no new approvals
 
   return (
     <div>
       <PageHeader
         title="Verify Charters"
         description={`${event.title} · ${fmtDate(event.date, "MMM D")} at ${fmtTime(event.time)}`}
+        actions={isOver ? undefined : <EndDutyControl event={event} onChanged={load} />}
       />
 
       <p className="mb-5 rounded-2xl bg-muted/60 px-4 py-3 text-sm text-muted-foreground">
         {isOver
           ? "This duty is already over, so approvals can no longer be changed."
-          : "Charters can only chart patients once you verify them here."}
+          : isEnded
+            ? "This duty has been ended, so charters can't chart and you can't approve more. Reopen it to approve again."
+            : "Charters can only chart patients once you verify them here."}
       </p>
 
       <SectionCard contentClassName="space-y-3">
@@ -134,7 +140,7 @@ function VerifyChartersContent() {
             ) : (
               <Button
                 size="sm"
-                disabled={isOver || busyId === person.user_id}
+                disabled={locked || busyId === person.user_id}
                 onClick={() => setVerified(person, true)}
               >
                 <Check className="mr-2 h-4 w-4" />

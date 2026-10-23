@@ -1,6 +1,6 @@
 import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
-import type { ReportStatus, VitalsReading } from "@/types/domain";
+import type { Report, ReportStatus, VitalsReading } from "@/types/domain";
 
 // Needed so fmtTime can read "14:30" / "14:30:00" / "2:30 PM" strictly.
 dayjs.extend(customParseFormat);
@@ -32,6 +32,19 @@ export function fmtDateLong(value: DateInput): string {
 export function fmtDateTimeStamp(value: DateInput): string {
   if (!value) return "—";
   return dayjs(value).format("MMM D, YYYY · h:mm A");
+}
+
+/**
+ * When a report was submitted, e.g. "Oct 22, 2026 · 9:05 PM".
+ * null for a draft, which hasn't been submitted yet. Falls back to created_at for
+ * the rare submitted report without submitted_at.
+ */
+export function submittedStamp(
+  report: Pick<Report, "status" | "submitted_at" | "created_at">,
+  format = "MMM D, YYYY · h:mm A"
+): string | null {
+  if (report.status === "draft") return null;
+  return fmtDate(report.submitted_at ?? report.created_at, format);
 }
 
 export function monthBounds(monthDate: Date | string): { start: string; end: string; label: string } {
