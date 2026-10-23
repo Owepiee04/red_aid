@@ -40,6 +40,15 @@ export async function createServerSupabaseClient() {
  * they always point back at the site the person signed up on.
  */
 export async function getSiteOrigin(): Promise<string> {
+  const configuredOrigin = process.env.REDIRECT_URL;
+  if (configuredOrigin) {
+    const url = new URL(configuredOrigin);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw new Error("REDIRECT_URL must use http or https");
+    }
+    return url.origin;
+  }
+
   const h = await headers();
   const origin = h.get("origin");
   if (origin) return origin;

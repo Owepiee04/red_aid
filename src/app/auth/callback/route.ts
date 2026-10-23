@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { createServerSupabaseClient, getSiteOrigin } from "@/lib/supabase-server";
 
 const EMAIL_LINK_TYPES: EmailOtpType[] = ["signup", "email", "recovery", "invite", "magiclink", "email_change"];
 
@@ -26,7 +26,7 @@ function safeNext(next: string | null): string {
  * Other links (password reset, invites): sign the person in and continue to ?next=.
  */
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
@@ -34,11 +34,9 @@ export async function GET(request: NextRequest) {
   // Password-reset links must end on the reset page even without ?next=.
   const next = type === "recovery" ? "/reset-password" : safeNext(searchParams.get("next"));
 
-  // Behind Vercel, request.url can report an internal host; prefer the public
-  // one, with the protocol the visitor actually used.
-  const forwardedHost = request.headers.get("x-forwarded-host");
-  const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0].trim() || "https";
-  const base = forwardedHost ? `${forwardedProto}://${forwardedHost}` : origin;
+  // Use the configured public URL in production so auth links never fall
+  // back to an internal or local request host.
+  const base = await getSiteOrigin();
 
   const fail = () => {
     // Supabase puts its own error (e.g. "Email link is invalid or has expired")
