@@ -17,6 +17,7 @@ next-env.d.ts
 # vercel / supabase local state
 .vercel
 supabase/.temp/
+**/supabase/.temp/
 supabase/.branches/
 
 # misc

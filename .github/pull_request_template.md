@@ -12,5 +12,5 @@
 - [ ] New migration in `supabase/migrations/` (applied to staging, RLS checked with a non-admin account)
 
 ## Checks
-- [ ] `npm run lint`, `npm run typecheck`, `npm run build` pass locally
+- [ ] `npm run typecheck` and `npm run build` pass locally
 - [ ] Tried on a phone-width screen

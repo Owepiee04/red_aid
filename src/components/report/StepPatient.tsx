@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { AGE_MAX, checkAge, cleanNumberInput } from "@/lib/vitals";
 import type { PatientForm } from "@/types/report-form";
 
 function Field({
@@ -33,6 +34,7 @@ interface StepPatientProps {
 export default function StepPatient({ value, onChange, eventLabel }: StepPatientProps) {
   const set = <K extends keyof PatientForm>(field: K, next: PatientForm[K]) =>
     onChange({ ...value, [field]: next });
+  const ageError = checkAge(value.patient_age).error;
 
   return (
     <div className="space-y-5">
@@ -59,15 +61,23 @@ export default function StepPatient({ value, onChange, eventLabel }: StepPatient
         </Field>
         <Field label="Age">
           <Input
-            type="number"
+            type="text"
             inputMode="numeric"
-            min="0"
-            max="130"
-            step="1"
+            pattern="[0-9]*"
+            autoComplete="off"
             value={value.patient_age}
-            onChange={(e) => set("patient_age", e.target.value)}
-            placeholder="0"
+            // Digits only (no "e", "-" or decimals), up to 3 of them.
+            onChange={(e) => set("patient_age", cleanNumberInput(e.target.value, { maxDigits: 3 }))}
+            placeholder="Years"
+            aria-invalid={!!ageError}
+            aria-describedby={ageError ? "patient-age-msg" : undefined}
+            className={cn(ageError && "border-destructive focus-visible:ring-destructive")}
           />
+          {ageError && (
+            <p id="patient-age-msg" className="text-xs text-destructive">
+              {ageError}
+            </p>
+          )}
         </Field>
       </div>
 

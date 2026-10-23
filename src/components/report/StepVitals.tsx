@@ -1,8 +1,10 @@
-import { Info, Plus, X } from "lucide-react";
+import { AlertTriangle, Info, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { nowTime } from "@/lib/formatting";
+import { cn } from "@/lib/utils";
+import { VITAL_RULES, checkVitalsRow, cleanNumberInput, type FieldCheck, type VitalField } from "@/lib/vitals";
 import type { VitalForm } from "@/types/report-form";
 
 export const emptyVital = (): VitalForm => ({
@@ -21,30 +23,83 @@ const MEASUREMENTS = ["temp", "pr", "rr", "bp_sys", "bp_dia", "spo2"] as const;
 export const hasMeasurements = (vital: VitalForm): boolean =>
   MEASUREMENTS.some((field) => vital[field].trim() !== "");
 
-interface TextFieldProps {
-  label: string;
+interface TimeFieldProps {
   value: string;
   onChange: (next: string) => void;
-  type?: "text" | "time";
-  placeholder?: string;
-  /** Brings up the number keypad on phones without the quirks of type="number". */
-  inputMode?: "decimal" | "numeric";
 }
 
-function TextField({ label, value, onChange, type = "text", placeholder, inputMode }: TextFieldProps) {
+function TimeField({ value, onChange }: TimeFieldProps) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      <Input
-        type={type}
-        inputMode={inputMode}
-        value={value}
-        placeholder={placeholder}
-        onChange={(event) => onChange(event.target.value)}
-      />
+      <Label className="text-xs text-muted-foreground">Time</Label>
+      <Input type="time" value={value} onChange={(event) => onChange(event.target.value)} />
     </div>
   );
 }
+
+interface NumberFieldProps {
+  field: VitalField;
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+  placeholder?: string;
+  check?: FieldCheck;
+  id: string;
+}
+
+/**
+ * A vitals box that only accepts numbers: letters and symbols are dropped as
+ * you type (temperature also takes one decimal place). Impossible values show
+ * a red message and block Next; unusual ones show an amber "double-check".
+ */
+function NumberField({ field, label, value, onChange, placeholder, check, id }: NumberFieldProps) {
+  const rule = VITAL_RULES[field];
+  const message = check?.error ?? check?.warning;
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id} className="text-xs text-muted-foreground">
+        {label}
+      </Label>
+      <Input
+        id={id}
+        type="text"
+        inputMode={rule.decimal ? "decimal" : "numeric"}
+        pattern={rule.decimal ? "[0-9]*[.,]?[0-9]?" : "[0-9]*"}
+        autoComplete="off"
+        value={value}
+        placeholder={placeholder}
+        aria-invalid={!!check?.error}
+        aria-describedby={message ? `${id}-msg` : undefined}
+        onChange={(event) => onChange(cleanNumberInput(event.target.value, rule))}
+        className={cn(
+          check?.error && "border-destructive focus-visible:ring-destructive",
+          !check?.error && check?.warning && "border-amber-400 focus-visible:ring-amber-400"
+        )}
+      />
+      {message && (
+        <p
+          id={`${id}-msg`}
+          className={cn(
+            "flex items-start gap-1 text-[11px] leading-tight",
+            check?.error ? "text-destructive" : "text-amber-700"
+          )}
+        >
+          {!check?.error && <AlertTriangle className="mt-px h-3 w-3 shrink-0" aria-hidden="true" />}
+          {message}
+        </p>
+      )}
+    </div>
+  );
+}
+
+const FIELDS: { field: VitalField; label: string; placeholder: string }[] = [
+  { field: "temp", label: "Temp (°C)", placeholder: "36.5" },
+  { field: "pr", label: "PR (bpm)", placeholder: "80" },
+  { field: "rr", label: "RR (/min)", placeholder: "18" },
+  { field: "bp_sys", label: "BP systolic", placeholder: "120" },
+  { field: "bp_dia", label: "BP diastolic", placeholder: "80" },
+  { field: "spo2", label: "SpO₂ (%)", placeholder: "98" },
+];
 
 interface StepVitalsProps {
   vitals: VitalForm[];
@@ -65,7 +120,8 @@ export default function StepVitals({ vitals, onChange }: StepVitalsProps) {
         <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
         <span>
           Vitals are optional. For a minor case, like a small scrape, you can leave them blank and
-          tap Next. Fill in only what you measured; empty checks aren&apos;t saved.
+          tap Next. Fill in only what you measured; empty checks aren&apos;t saved. Boxes take numbers
+          only; a red message must be fixed before Next, an amber one is just a reminder to double-check.
         </span>
       </p>
 
@@ -89,56 +145,7 @@ export default function StepVitals({ vitals, onChange }: StepVitalsProps) {
             </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <TextField
-              label="Time"
-              type="time"
-              value={vital.time}
-              onChange={(next) => update(index, "time", next)}
-            />
-            <TextField
-              label="Temp (°C)"
-              inputMode="decimal"
-              value={vital.temp}
-              onChange={(next) => update(index, "temp", next)}
-              placeholder="36.5"
-            />
-            <TextField
-              label="PR (bpm)"
-              inputMode="numeric"
-              value={vital.pr}
-              onChange={(next) => update(index, "pr", next)}
-              placeholder="80"
-            />
-            <TextField
-              label="RR (/min)"
-              inputMode="numeric"
-              value={vital.rr}
-              onChange={(next) => update(index, "rr", next)}
-              placeholder="18"
-            />
-            <TextField
-              label="BP systolic"
-              inputMode="numeric"
-              value={vital.bp_sys}
-              onChange={(next) => update(index, "bp_sys", next)}
-              placeholder="120"
-            />
-            <TextField
-              label="BP diastolic"
-              inputMode="numeric"
-              value={vital.bp_dia}
-              onChange={(next) => update(index, "bp_dia", next)}
-              placeholder="80"
-            />
-            <TextField
-              label="SpO₂ (%)"
-              inputMode="numeric"
-              value={vital.spo2}
-              onChange={(next) => update(index, "spo2", next)}
-              placeholder="98"
-            />
-          </div>
+          <VitalsGrid index={index} vital={vital} update={update} />
         </div>
       ))}
 
@@ -146,6 +153,35 @@ export default function StepVitals({ vitals, onChange }: StepVitalsProps) {
         <Plus className="mr-2 h-4 w-4" />
         {vitals.length === 0 ? "Add Vitals Check" : "Add Another Vitals Check"}
       </Button>
+    </div>
+  );
+}
+
+function VitalsGrid({
+  index,
+  vital,
+  update,
+}: {
+  index: number;
+  vital: VitalForm;
+  update: (index: number, field: keyof VitalForm, next: string) => void;
+}) {
+  const checks = checkVitalsRow(vital);
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <TimeField value={vital.time} onChange={(next) => update(index, "time", next)} />
+      {FIELDS.map(({ field, label, placeholder }) => (
+        <NumberField
+          key={field}
+          id={`vital-${index}-${field}`}
+          field={field}
+          label={label}
+          value={vital[field]}
+          onChange={(next) => update(index, field, next)}
+          placeholder={placeholder}
+          check={checks[field]}
+        />
+      ))}
     </div>
   );
 }
