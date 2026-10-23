@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import SectionCard from "@/components/SectionCard";
 import UserAvatar from "@/components/UserAvatar";
 import ReportList from "@/components/ReportList";
+import RoleSelect from "@/components/RoleSelect";
 import EmptyState from "@/components/EmptyState";
 import LoadingState from "@/components/LoadingState";
 import { adminReportColumns } from "@/components/reportColumns";
@@ -20,7 +21,7 @@ export default function UserProfilePage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
 
-  const { data, loading, error } = useData(async () => {
+  const { data, loading, error, load } = useData(async () => {
     const person = await getProfile(id);
     if (!person) return null;
     const [dutyHistory, reports] = await Promise.all([
@@ -57,9 +58,7 @@ export default function UserProfilePage() {
           </h1>
           <p className="text-sm text-muted-foreground">{person.email}</p>
           <div className="mt-2 flex items-center gap-2">
-            <span className="rounded-full border border-primary/20 bg-accent px-2.5 py-0.5 text-xs font-medium text-accent-foreground">
-              {person.duty_role ? ROLE_LABEL[person.duty_role] : "Unassigned"}
-            </span>
+            <RoleSelect person={person} onChanged={() => load()} />
             <span
               className={
                 person.active
