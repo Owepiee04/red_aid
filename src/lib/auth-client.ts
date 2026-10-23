@@ -68,7 +68,12 @@ export async function verifySignUpCode(email: string, code: string): Promise<{ e
 /** Emails a fresh sign-up code. */
 export async function resendSignUpCode(email: string): Promise<{ error: string | null }> {
   const supabase = createClient();
-  const { error } = await supabase.auth.resend({ type: "signup", email: email.trim() });
+  const { error } = await supabase.auth.resend({
+    type: "signup",
+    email: email.trim(),
+    // Same destination as the link in the first email (see actions/auth.ts).
+    options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+  });
   return { error: error ? friendlyAuthError(error.message) : null };
 }
 

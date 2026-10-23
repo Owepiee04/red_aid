@@ -40,15 +40,14 @@ export default function SignUpPage() {
     setLoading(true);
 
     const result = await signUp(email, password, firstName, lastName);
-    console.log(result.status)
     if (result.status === "code_sent") {
       router.push(`/verify-email?email=${encodeURIComponent(email.trim())}&sent=1`);
       return;
     }
-    
+
     if (result.status === "signed_in") {
-      router.push("/");
-      router.refresh();
+      // Full page load so the new login cookie is sent with the request.
+      window.location.href = "/";
       return;
     }
     setLoading(false);
