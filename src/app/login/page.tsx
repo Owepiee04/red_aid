@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import AuthLayout from "@/components/AuthLayout";
-import { createClient } from "@/lib/supabase";
+import { signIn } from "@/lib/auth-client";
 
 // No "Continue with Google" and no "Create one" registration link here —
 // RedAid accounts are Admin-provisioned only (Manage Accounts), not
@@ -25,11 +25,7 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
 
-    const supabase = createClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { error: signInError } = await signIn(email, password);
 
     if (signInError) {
       setError("Incorrect email or password");
