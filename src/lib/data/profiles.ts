@@ -1,17 +1,33 @@
 import { createClient } from "@/lib/supabase";
-import { sanitizeSearch } from "@/lib/data/search";
+import { listUsers } from "@/lib/data/users";
 import type { DutyRole } from "@/types/auth";
-import type { Profile } from "@/types/domain";
+import type { Profile, UserRecord } from "@/types/domain";
 
 const STAFF_ROLES: DutyRole[] = ["team_leader", "charter"];
+
+function fullNameOf(user: UserRecord): string {
+  return `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim();
+}
+
+function toProfile(user: UserRecord): Profile {
+  return {
+    id: user.id,
+    email: "",
+    full_name: fullNameOf(user) || null,
+    role: user.is_admin ? "admin" : "user",
+    duty_role: user.duty_role,
+    active: user.is_active,
+    photo_url: user.pfp_img_url,
+    created_at: user.created_at,
+  };
+}
 
 export async function countActiveStaff(): Promise<number> {
   const supabase = createClient();
   const { count, error } = await supabase
-    .from("profiles")
+    .from("users")
     .select("id", { count: "exact", head: true })
-    .eq("active", true)
-    .in("duty_role", STAFF_ROLES);
+    .eq("is_active", true);
   if (error) throw new Error(error.message);
   return count ?? 0;
 }
@@ -22,34 +38,26 @@ export interface ListStaffParams {
 }
 
 export async function listStaff({ role, search }: ListStaffParams = {}): Promise<Profile[]> {
-  const supabase = createClient();
-  let q = supabase
-    .from("profiles")
-    .select("*")
-    .order("full_name", { ascending: true, nullsFirst: false })
-    .limit(500);
-  q = role ? q.eq("duty_role", role) : q.in("duty_role", STAFF_ROLES);
-
-  const term = search ? sanitizeSearch(search) : "";
-  if (term) q = q.or(`full_name.ilike.%${term}%,email.ilike.%${term}%`);
-
-  const { data, error } = await q;
-  if (error) throw new Error(error.message);
-  return (data ?? []) as Profile[];
+  const users = await listUsers({ search });
+  return users
+    .map(toProfile)
+    .filter((profile) =>
+      role ? profile.duty_role === role : profile.duty_role !== null && STAFF_ROLES.includes(profile.duty_role)
+    );
 }
 
 export async function getProfile(id: string): Promise<Profile | null> {
   const supabase = createClient();
-  const { data, error } = await supabase.from("profiles").select("*").eq("id", id).maybeSingle();
+  const { data, error } = await supabase.from("users").select("*").eq("id", id).maybeSingle();
   if (error) throw new Error(error.message);
-  return (data as Profile | null) ?? null;
+  return data ? toProfile(data as UserRecord) : null;
 }
 
 export async function setAccountActive(id: string, active: boolean): Promise<void> {
   const supabase = createClient();
   const { data, error } = await supabase
-    .from("profiles")
-    .update({ active })
+    .from("users")
+    .update({ is_active: active })
     .eq("id", id)
     .select("id");
   if (error) throw new Error(error.message);

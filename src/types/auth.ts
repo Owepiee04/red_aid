@@ -1,10 +1,8 @@
 /**
- * Mirrors the `profiles` table in Supabase (not `auth.users` directly —
- * Supabase Auth owns email/password itself; this is the app-specific row
- * keyed by the same user id). See the roles.js conversion notes: `role`
- * is the platform-level flag (admin vs. regular account), and `duty_role`
- * is the Admin-assigned Team Leader / Charter designation that only
- * applies to non-admin accounts.
+ * App-side view of `public.users` plus the Supabase Auth email.
+ * `role` is the platform-level flag (admin vs. regular account), and
+ * `duty_role` is the account's default Team Leader / Charter designation.
+ * Per-event roles live in `event_members.member_role`.
  */
 export type DutyRole = "team_leader" | "charter";
 export type PlatformRole = "admin" | "user";

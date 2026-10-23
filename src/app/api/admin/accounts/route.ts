@@ -10,6 +10,13 @@ type DutyRole = (typeof DUTY_ROLES)[number];
 
 const fail = (error: string, status: number) => NextResponse.json({ error }, { status });
 
+function splitName(name: string): { firstName: string; lastName: string } {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { firstName: "", lastName: "" };
+  if (parts.length === 1) return { firstName: parts[0], lastName: "" };
+  return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
+}
+
 export async function POST(request: Request) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -27,9 +34,13 @@ export async function POST(request: Request) {
   const { data: caller, error: callerError } = await admin.auth.getUser(token);
   if (callerError || !caller.user) return fail("Your session has expired. Please log in again.", 401);
 
-  // 2. Are they an admin? (read from the database, never trusted from the browser)
-  const { data: profile } = await admin.from("profiles").select("role").eq("id", caller.user.id).maybeSingle();
-  if (profile?.role !== "admin") return fail("Only admins can create accounts.", 403);
+  // 2. Are they a platform admin? (read from the database, never trusted from the browser)
+  const { data: callerRow } = await admin
+    .from("users")
+    .select("is_admin")
+    .eq("id", caller.user.id)
+    .maybeSingle();
+  if (!callerRow?.is_admin) return fail("Only admins can create accounts.", 403);
 
   // 3. Validate the request.
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
@@ -44,8 +55,10 @@ export async function POST(request: Request) {
     return fail("A temporary password must be at least 8 characters.", 400);
   }
 
+  const { firstName, lastName } = splitName(name);
+
   // 4. Create the login: either with a password (no email) or by emailing an invite.
-  const metadata = { full_name: name };
+  const metadata = { first_name: firstName, last_name: lastName };
   const created = password
     ? await admin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: metadata })
     : await admin.auth.admin.inviteUserByEmail(email, {
@@ -60,20 +73,18 @@ export async function POST(request: Request) {
     return fail(exists ? "An account with that email already exists." : message, exists ? 409 : 400);
   }
 
-  // 5. Create their profile (role + duty role). If this fails, undo the login so we
-  //    don't leave a half-made account that blocks retrying the same email.
+  // 5. Make sure the users row carries the chosen default duty role. The signup
+  //    trigger already created it; this upsert only fills in the app-level role.
   const userId = created.data.user.id;
-  const { error: profileError } = await admin.from("profiles").upsert({
+  const { error: rowError } = await admin.from("users").upsert({
     id: userId,
-    email,
-    full_name: name || null,
-    role: "user",
+    first_name: firstName || "User",
+    last_name: lastName,
     duty_role: dutyRole,
-    active: true,
   });
-  if (profileError) {
+  if (rowError) {
     await admin.auth.admin.deleteUser(userId);
-    return fail(`Couldn't save the profile: ${profileError.message}`, 500);
+    return fail(`Couldn't save the user: ${rowError.message}`, 500);
   }
 
   return NextResponse.json({ id: userId, invited: !password });
