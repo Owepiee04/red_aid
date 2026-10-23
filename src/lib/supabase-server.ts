@@ -34,25 +34,46 @@ export async function createServerSupabaseClient() {
   );
 }
 
+const isLocalHost = (hostname: string) =>
+  hostname === "localhost" || hostname === "127.0.0.1" || hostname === "0.0.0.0" || hostname.endsWith(".local");
+
 /**
- * The address the site is being served from (http://localhost:3000 locally,
- * https://<your-site> on Vercel). Used to build the links inside emails, so
- * they always point back at the site the person signed up on.
+ * The public address of the site: http://localhost:3000 locally,
+ * https://<your-site> on Vercel. Used for the links inside emails and for
+ * redirects after an email link, so they always come back to the right site.
+ *
+ * Order:
+ *   1. REDIRECT_URL, if set (Vercel → Settings → Environment Variables).
+ *      On Vercel a localhost value is ignored: it's almost always a copy of
+ *      .env.local, and it would send every email link to localhost.
+ *   2. The address the browser used (Origin / X-Forwarded-Host headers).
+ *   3. Vercel's own production domain (VERCEL_PROJECT_PRODUCTION_URL).
  */
 export async function getSiteOrigin(): Promise<string> {
-  const configuredOrigin = process.env.REDIRECT_URL;
-  if (configuredOrigin) {
-    const url = new URL(configuredOrigin);
+  const onVercel = !!process.env.VERCEL;
+
+  const configured = process.env.REDIRECT_URL?.trim();
+  if (configured) {
+    const url = new URL(configured);
     if (url.protocol !== "http:" && url.protocol !== "https:") {
       throw new Error("REDIRECT_URL must use http or https");
     }
-    return url.origin;
+    if (!(onVercel && isLocalHost(url.hostname))) return url.origin;
+    console.warn(`Ignoring REDIRECT_URL=${configured} on Vercel: it points at localhost.`);
   }
 
   const h = await headers();
   const origin = h.get("origin");
-  if (origin) return origin;
+  // Origin can be the literal string "null" (e.g. privacy redirects), so parse carefully.
+  const originHost = origin && URL.canParse(origin) ? new URL(origin).hostname : null;
+  if (origin && originHost && !(onVercel && isLocalHost(originHost))) return origin;
+
   const host = h.get("x-forwarded-host") ?? h.get("host");
-  const proto = h.get("x-forwarded-proto") ?? (host?.startsWith("localhost") ? "http" : "https");
-  return host ? `${proto}://${host}` : process.env.NEXT_PUBLIC_APP_URL ?? "";
+  if (host && !(onVercel && isLocalHost(host.split(":")[0]))) {
+    const proto = h.get("x-forwarded-proto")?.split(",")[0].trim() ?? (isLocalHost(host.split(":")[0]) ? "http" : "https");
+    return `${proto}://${host}`;
+  }
+
+  const vercelDomain = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
+  return vercelDomain ? `https://${vercelDomain}` : "http://localhost:3000";
 }

@@ -22,9 +22,10 @@ export async function signUp(email: string, password: string, firstName: string,
       password,
       options: {
         data: { first_name: firstName.trim(), last_name: lastName.trim() },
-        // Where the "Confirm your email" link sends people. /auth/callback
-        // confirms the account and opens the login page.
-        emailRedirectTo: `${await getSiteOrigin()}/auth/callback?flow=signup`,
+        // Where the "Confirm your email" link sends people: /auth/confirm
+        // confirms the account and opens the login page. No "?..." on the end,
+        // so it matches Supabase's Redirect URLs list exactly.
+        emailRedirectTo: `${await getSiteOrigin()}/auth/confirm`,
       },
     });
     if (error) return { status: "error", message: friendlyAuthError(error.message) };
@@ -62,7 +63,7 @@ export async function resetPassword(email: string): Promise<{ error: { message: 
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     // The reset email's link goes through /auth/callback (which signs the person
     // in with the link's code) and then on to the reset-password page.
-    redirectTo: `${await getSiteOrigin()}/auth/callback?next=/reset-password`,
+    redirectTo: `${await getSiteOrigin()}/auth/reset`,
   });
   return { error };
 }

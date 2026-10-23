@@ -58,14 +58,14 @@ export async function signUp({ firstName, lastName, email, password }: SignUpDet
 
 /**
  * Sends the sign-up confirmation email again. The link in it goes to
- * /auth/callback?flow=signup, which confirms the account and opens /login.
+ * /auth/confirm, which confirms the account and opens /login.
  */
 export async function resendConfirmationEmail(email: string): Promise<{ error: string | null }> {
   const supabase = createClient();
   const { error } = await supabase.auth.resend({
     type: "signup",
     email: email.trim(),
-    options: { emailRedirectTo: `${window.location.origin}/auth/callback?flow=signup` },
+    options: { emailRedirectTo: `${window.location.origin}/auth/confirm` },
   });
   return { error: error ? friendlyAuthError(error.message) : null };
 }
