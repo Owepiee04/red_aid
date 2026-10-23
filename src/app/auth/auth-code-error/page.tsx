@@ -40,7 +40,7 @@ export default function AuthCodeErrorPage() {
       subtitle="The confirmation link appears to be invalid or has expired"
       footer={
         <Link href="/verify-email" className="text-primary font-medium hover:underline">
-          Get a new code instead
+          Send a new confirmation email
         </Link>
       }
     >
@@ -49,7 +49,7 @@ export default function AuthCodeErrorPage() {
         has already been used or has expired.
       </p>
       <p className="mt-2 text-sm text-foreground text-center">
-        If you already confirmed, just log in. Otherwise, ask for a new code and type it in instead of using the link.
+        If you already confirmed, just log in. Otherwise, send a new confirmation email and use the link in the newest one.
       </p>
     </AuthLayout>
   );

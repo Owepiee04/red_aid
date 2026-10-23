@@ -14,9 +14,10 @@ import { MIN_PASSWORD_LENGTH } from "@/lib/auth-client";
 import { signUp } from "@/actions/auth";
 import { cn } from "@/lib/utils";
 
-// Step 1 of 2: create the account. Supabase then emails a 6-digit code and
-// step 2 (/verify-email) checks it. Everyone who signs up starts as a
-// First Aider; Admins are promoted directly in the database.
+// Step 1 of 2: create the account. Supabase then emails a confirmation link,
+// and step 2 (/verify-email) tells the person to check their inbox. The link
+// confirms the account and brings them to /login. Everyone who signs up
+// starts as a First Aider; Admins are promoted directly in the database.
 export default function SignUpPage() {
   const router = useRouter();
   const [firstName, setFirstName] = useState("");
@@ -144,7 +145,7 @@ export default function SignUpPage() {
               required
             />
           </div>
-          <p className="text-xs text-muted-foreground">We&apos;ll send a 6-digit code here to confirm it&apos;s you.</p>
+          <p className="text-xs text-muted-foreground">We&apos;ll email you a link to confirm it&apos;s you.</p>
         </div>
 
         <div className="space-y-2">
