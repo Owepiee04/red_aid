@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import AuthLayout from "@/components/AuthLayout";
 import PasswordInput from "@/components/PasswordInput";
-import { isEmailNotConfirmed, signIn } from "@/lib/auth-client";
+import { signIn } from "@/actions/auth";
+import { isEmailNotConfirmed } from "@/lib/auth-client";
 
 // People create their own account at /signup (verified with an emailed
 // code). Logging in before verifying sends them to /verify-email.
@@ -50,10 +51,8 @@ export default function LoginPage() {
       return;
     }
 
-    // Land on "/", which routes to the right dashboard once the profile
-    // (role / duty_role) has loaded — see app/page.tsx.
-    router.push("/");
-    router.refresh();
+    // Server action sets the session cookie; full navigation picks it up.
+    window.location.href = "/";
   };
 
   return (

@@ -51,12 +51,17 @@ on `auth.users`. One-time Supabase settings:
 
 1. **Authentication → Providers → Email**: Enable Email provider, turn on **Confirm email**,
    and set **Email OTP Length** to 6 (it must match `OTP_LENGTH` in `src/lib/auth-client.ts`).
-2. **Authentication → Email Templates → Confirm signup**: put the code in the email, e.g.
+2. **Authentication → Email Templates → Confirm signup**: show both the code and a link.
+   The `token_hash` link works on any device (the default `{{ .ConfirmationURL }}` link only
+   works in the same browser that signed up):
    ```html
    <h2>Your RedAid code</h2>
    <p>Enter this code to finish signing up:</p>
    <p style="font-size:28px;font-weight:bold;letter-spacing:6px">{{ .Token }}</p>
+   <p>Or tap: <a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email">Confirm my email</a></p>
    ```
+   Also add `https://<your-site>/auth/callback` (and `http://localhost:3000/auth/callback`)
+   under **Authentication → URL Configuration → Redirect URLs**.
 3. **Custom SMTP (required before real users sign up)**: Supabase's built-in email only
    sends to your project's team members and only a few per hour. Under
    **Project Settings → Authentication → SMTP Settings**, connect a sender such as a Gmail

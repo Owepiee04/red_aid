@@ -102,7 +102,7 @@ function VerifyEmail() {
     <AuthLayout
       icon={MailCheck}
       title="Check your email"
-      subtitle={codeSent ? `Enter the ${OTP_LENGTH}-digit code we sent` : "Verify your email to finish signing up"}
+      subtitle={codeSent ? `Enter the code we sent or click the confirmation link` : "Verify your email to finish signing up"}
       footer={
         <Link href="/signup" className="font-medium text-primary hover:underline">
           <ArrowLeft className="mr-1 inline h-3 w-3" />
@@ -172,7 +172,7 @@ function VerifyEmail() {
               autoFocus
             />
             <p className="text-center text-xs text-muted-foreground">
-              Can&apos;t find it? Check your spam folder. The code expires after a while, so use the newest one.
+              Can&apos;t find it? Check your spam folder. You can also click the confirmation link in the email if you received one instead of a code.
             </p>
           </div>
         )}
@@ -201,7 +201,7 @@ function VerifyEmail() {
               )}
             </Button>
             <p className="text-center text-sm text-muted-foreground">
-              Didn&apos;t get a code?{" "}
+              Didn&apos;t get the email?{" "}
               {cooldown > 0 ? (
                 <span className="tabular-nums">Resend in {cooldown}s</span>
               ) : (
@@ -211,7 +211,7 @@ function VerifyEmail() {
                   disabled={sending}
                   className="font-semibold text-primary hover:underline disabled:opacity-50"
                 >
-                  {sending ? "Sending..." : "Resend code"}
+                  {sending ? "Sending..." : "Resend email"}
                 </button>
               )}
             </p>
