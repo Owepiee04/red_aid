@@ -14,9 +14,7 @@ export interface AuthResult {
   error: { message: string } | null;
 }
 
-/** Length of the email code. Must match Supabase → Authentication → Providers → Email → "Email OTP Length". */
-export const OTP_LENGTH = 6;
-/** Seconds to wait before "Resend code" works again (Supabase also rate-limits resends). */
+/** Seconds to wait before "Resend email" works again (Supabase also rate-limits emails). */
 export const RESEND_COOLDOWN_SECONDS = 60;
 export const MIN_PASSWORD_LENGTH = 8;
 
@@ -28,7 +26,7 @@ export interface SignUpDetails {
 }
 
 export type SignUpOutcome =
-  /** Account created; a code was emailed. Go to the verify step. */
+  /** Account created; a confirmation email was sent. Go to the "check your email" step. */
   | { status: "code_sent", data : {user : User, session : Session | null} }
   /** Email confirmation is turned off in Supabase, so the user is already signed in. */
   | { status: "signed_in" }
@@ -37,7 +35,7 @@ export type SignUpOutcome =
   | { status: "error"; message: string };
 
 /**
- * Creates the account and makes Supabase email a one-time code.
+ * Creates the account and makes Supabase send the confirmation email.
  * first_name / last_name ride along as user metadata; the database side
  * (a trigger on auth.users) can copy them into the users table.
  */
@@ -58,21 +56,16 @@ export async function signUp({ firstName, lastName, email, password }: SignUpDet
   return { status: "code_sent", data : data };
 }
 
-/** Checks the emailed code. On success the user is signed in. */
-export async function verifySignUpCode(email: string, code: string): Promise<{ error: string | null }> {
-  const supabase = createClient();
-  const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: code, type: "signup" });
-  return { error: error ? friendlyAuthError(error.message) : null };
-}
-
-/** Emails a fresh sign-up code. */
-export async function resendSignUpCode(email: string): Promise<{ error: string | null }> {
+/**
+ * Sends the sign-up confirmation email again. The link in it goes to
+ * /auth/callback?flow=signup, which confirms the account and opens /login.
+ */
+export async function resendConfirmationEmail(email: string): Promise<{ error: string | null }> {
   const supabase = createClient();
   const { error } = await supabase.auth.resend({
     type: "signup",
     email: email.trim(),
-    // Same destination as the link in the first email (see actions/auth.ts).
-    options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+    options: { emailRedirectTo: `${window.location.origin}/auth/callback?flow=signup` },
   });
   return { error: error ? friendlyAuthError(error.message) : null };
 }
@@ -114,7 +107,7 @@ export function isEmailNotConfirmed(message: string | undefined | null): boolean
 /** Turns Supabase's error text into something a first aider can act on. */
 export function friendlyAuthError(message: string): string {
   if (/expired|invalid.*(otp|token)|token.*(expired|invalid)/i.test(message)) {
-    return "That code is wrong or has expired. Check the latest email, or send a new code.";
+    return "That link is invalid or has expired. Send a new confirmation email and use the newest one.";
   }
   if (/rate limit|too many|for security purposes/i.test(message)) {
     return "Too many tries. Please wait a minute and try again.";

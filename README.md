@@ -43,25 +43,25 @@ Do these once per Supabase project; skipping any of them breaks login emails or 
    Every other account is created from Admin → Accounts inside the app.
 5. Log in on a phone, open the browser menu, and choose **Add to Home Screen** / **Install app**.
 
-## Sign-up with an email code
-`/signup` creates the account and `/verify-email` checks the 6-digit code Supabase emails.
+## Sign-up and email confirmation
+Flow: `/signup` → `/verify-email` ("check your inbox", with a resend button) → the person taps
+the link in the email → `/auth/callback` confirms the account → `/login?confirmed=1`, where they
+log in with their email and password.
+
 The pages only use Supabase Auth; creating the matching row in the users table (with
 `first_name` / `last_name` from the sign-up metadata) is the schema's job, e.g. a trigger
 on `auth.users`. One-time Supabase settings:
 
-1. **Authentication → Providers → Email**: Enable Email provider, turn on **Confirm email**,
-   and set **Email OTP Length** to 6 (it must match `OTP_LENGTH` in `src/lib/auth-client.ts`).
-2. **Authentication → Email Templates → Confirm signup**: show both the code and a link.
-   The `token_hash` link works on any device (the default `{{ .ConfirmationURL }}` link only
-   works in the same browser that signed up):
+1. **Authentication → Providers → Email**: Enable Email provider and turn on **Confirm email**.
+2. **Authentication → URL Configuration → Redirect URLs**: add
+   `https://<your-site>/auth/callback` and `http://localhost:3000/auth/callback`.
+   **Confirm signup** email template: the default `{{ .ConfirmationURL }}` link works (on any
+   device). A friendlier version:
    ```html
-   <h2>Your RedAid code</h2>
-   <p>Enter this code to finish signing up:</p>
-   <p style="font-size:28px;font-weight:bold;letter-spacing:6px">{{ .Token }}</p>
-   <p>Or tap: <a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email">Confirm my email</a></p>
+   <h2>Confirm your RedAid account</h2>
+   <p>Tap the button below to confirm your email, then log in with your email and password.</p>
+   <p><a href="{{ .ConfirmationURL }}">Confirm my email</a></p>
    ```
-   Also add `https://<your-site>/auth/callback` (and `http://localhost:3000/auth/callback`)
-   under **Authentication → URL Configuration → Redirect URLs**.
 3. **Custom SMTP (required before real users sign up)**: Supabase's built-in email only
    sends to your project's team members and only a few per hour. Under
    **Project Settings → Authentication → SMTP Settings**, connect a sender such as a Gmail

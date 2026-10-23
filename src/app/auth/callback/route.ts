@@ -10,21 +10,27 @@ function safeNext(next: string | null): string {
 }
 
 /**
- * Where links in Supabase emails land (confirm sign-up, reset password,
- * invites). Signs the person in, saves the session cookie, then sends them on.
+ * Where links in Supabase emails land.
  *
- * Two kinds of links are accepted:
- *   ?code=...                    Supabase's default link. Only works in the same browser
- *                                that signed up (it needs a cookie that browser saved).
- *   ?token_hash=...&type=...     Works on any device. Use it by setting the email
- *                                template link to:
- *                                {{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email
+ * Sign-up confirmation (?flow=signup, or a token_hash link with type=signup/email):
+ *   the account is confirmed, then the person is sent to /login?confirmed=1 to log in
+ *   with their email and password. No session is kept, so the login page is what
+ *   they actually see.
+ *     - Supabase's default link ({{ .ConfirmationURL }}) confirms the email on
+ *       Supabase's side before it redirects here with ?code=, so we don't need the
+ *       code at all. That also makes it work when the email is opened on a
+ *       different phone or computer than the one used to sign up.
+ *     - A token_hash link ({{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email)
+ *       is confirmed here with verifyOtp.
+ *
+ * Other links (password reset, invites): sign the person in and continue to ?next=.
  */
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
+  const isSignupConfirmation = searchParams.get("flow") === "signup" || type === "signup" || type === "email";
   // Password-reset links must end on the reset page even without ?next=.
   const next = type === "recovery" ? "/reset-password" : safeNext(searchParams.get("next"));
 
@@ -34,9 +40,32 @@ export async function GET(request: NextRequest) {
   const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0].trim() || "https";
   const base = forwardedHost ? `${forwardedProto}://${forwardedHost}` : origin;
 
-  const supabase = await createServerSupabaseClient();
-  let ok = false;
+  const fail = () => {
+    // Supabase puts its own error (e.g. "Email link is invalid or has expired")
+    // in the URL when the link was already used or expired.
+    const errorUrl = new URL(`${base}/auth/auth-code-error`);
+    const reason = searchParams.get("error_description");
+    if (reason) errorUrl.searchParams.set("reason", reason);
+    return NextResponse.redirect(errorUrl);
+  };
 
+  if (searchParams.get("error")) return fail();
+
+  const supabase = await createServerSupabaseClient();
+
+  if (isSignupConfirmation) {
+    if (tokenHash && type && EMAIL_LINK_TYPES.includes(type)) {
+      const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
+      if (error) return fail();
+      // verifyOtp also logs the person in; drop that session so they log in themselves.
+      await supabase.auth.signOut({ scope: "local" });
+    } else if (!code) {
+      return fail();
+    }
+    return NextResponse.redirect(`${base}/login?confirmed=1`);
+  }
+
+  let ok = false;
   if (tokenHash && type && EMAIL_LINK_TYPES.includes(type)) {
     const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
     ok = !error;
@@ -45,12 +74,5 @@ export async function GET(request: NextRequest) {
     ok = !error;
   }
 
-  if (ok) return NextResponse.redirect(`${base}${next}`);
-
-  // Supabase puts its own error (e.g. "Email link is invalid or has expired")
-  // in the URL when the link was already used; pass it along for the error page.
-  const reason = searchParams.get("error_description");
-  const errorUrl = new URL(`${base}/auth/auth-code-error`);
-  if (reason) errorUrl.searchParams.set("reason", reason);
-  return NextResponse.redirect(errorUrl);
+  return ok ? NextResponse.redirect(`${base}${next}`) : fail();
 }

@@ -23,8 +23,8 @@ export async function signUp(email: string, password: string, firstName: string,
       options: {
         data: { first_name: firstName.trim(), last_name: lastName.trim() },
         // Where the "Confirm your email" link sends people. /auth/callback
-        // signs them in and continues to the app.
-        emailRedirectTo: `${await getSiteOrigin()}/auth/callback`,
+        // confirms the account and opens the login page.
+        emailRedirectTo: `${await getSiteOrigin()}/auth/callback?flow=signup`,
       },
     });
     if (error) return { status: "error", message: friendlyAuthError(error.message) };
