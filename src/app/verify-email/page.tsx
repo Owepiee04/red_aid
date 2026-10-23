@@ -13,7 +13,7 @@ import { RESEND_COOLDOWN_SECONDS, resendConfirmationEmail } from "@/lib/auth-cli
 
 // Step 2 of 2: "check your inbox". Sign-up is confirmed only by the link in
 // the email Supabase sends; this page just says the email is on its way and
-// lets people resend it. Clicking the link goes to /auth/callback, which
+// lets people resend it. Clicking the link goes to /auth/confirm, which
 // confirms the account and sends them to /login to sign in.
 //
 // Reached right after sign-up (?email=...&sent=1), or from the login page when
