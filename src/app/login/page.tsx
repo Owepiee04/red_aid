@@ -1,23 +1,23 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogIn, Mail, Lock, Loader2 } from "lucide-react";
+import { LogIn, Mail, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import AuthLayout from "@/components/AuthLayout";
-import { signIn } from "@/lib/auth-client";
+import PasswordInput from "@/components/PasswordInput";
+import { isEmailNotConfirmed, signIn } from "@/lib/auth-client";
 
-// No "Continue with Google" and no "Create one" registration link here —
-// RedAid accounts are Admin-provisioned only (Manage Accounts), not
-// self-registered, so neither applies.
+// People create their own account at /signup (verified with an emailed
+// code). Logging in before verifying sends them to /verify-email.
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<ReactNode>("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -26,6 +26,23 @@ export default function LoginPage() {
     setLoading(true);
 
     const { error: signInError } = await signIn(email, password);
+
+    if (signInError && isEmailNotConfirmed(signInError.message)) {
+      setError(
+        <>
+          You haven&apos;t verified this email yet.{" "}
+          <Link
+            href={`/verify-email?email=${encodeURIComponent(email.trim())}`}
+            className="font-semibold underline"
+          >
+            Verify it now
+          </Link>
+          .
+        </>
+      );
+      setLoading(false);
+      return;
+    }
 
     if (signInError) {
       setError("Incorrect email or password");
@@ -40,9 +57,21 @@ export default function LoginPage() {
   };
 
   return (
-    <AuthLayout icon={LogIn} title="Welcome back" subtitle="Log in to your account">
+    <AuthLayout
+      icon={LogIn}
+      title="Welcome back"
+      subtitle="Log in to your account"
+      footer={
+        <>
+          New to RedAid?{" "}
+          <Link href="/signup" className="font-medium text-primary hover:underline">
+            Create an account
+          </Link>
+        </>
+      }
+    >
       {error && (
-        <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+        <div role="alert" className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
           {error}
         </div>
       )}
@@ -75,22 +104,14 @@ export default function LoginPage() {
               Forgot password?
             </Link>
           </div>
-          <div className="relative">
-            <Lock
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="pl-10 h-12"
-              required
-            />
-          </div>
+          <PasswordInput
+            id="password"
+            autoComplete="current-password"
+            placeholder="••••••••"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
         </div>
         <Button type="submit" className="w-full h-12 font-medium" disabled={loading}>
           {loading ? (

@@ -42,3 +42,23 @@ Do these once per Supabase project; skipping any of them breaks login emails or 
    ```
    Every other account is created from Admin → Accounts inside the app.
 5. Log in on a phone, open the browser menu, and choose **Add to Home Screen** / **Install app**.
+
+## Sign-up with an email code
+`/signup` creates the account and `/verify-email` checks the 6-digit code Supabase emails.
+The pages only use Supabase Auth; creating the matching row in the users table (with
+`first_name` / `last_name` from the sign-up metadata) is the schema's job, e.g. a trigger
+on `auth.users`. One-time Supabase settings:
+
+1. **Authentication → Providers → Email**: Enable Email provider, turn on **Confirm email**,
+   and set **Email OTP Length** to 6 (it must match `OTP_LENGTH` in `src/lib/auth-client.ts`).
+2. **Authentication → Email Templates → Confirm signup**: put the code in the email, e.g.
+   ```html
+   <h2>Your RedAid code</h2>
+   <p>Enter this code to finish signing up:</p>
+   <p style="font-size:28px;font-weight:bold;letter-spacing:6px">{{ .Token }}</p>
+   ```
+3. **Custom SMTP (required before real users sign up)**: Supabase's built-in email only
+   sends to your project's team members and only a few per hour. Under
+   **Project Settings → Authentication → SMTP Settings**, connect a sender such as a Gmail
+   account with an App Password, Brevo, or Resend, then raise
+   **Authentication → Rate Limits → emails per hour**.
