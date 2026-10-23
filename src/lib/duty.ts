@@ -1,9 +1,8 @@
 import dayjs from "dayjs";
 
 /**
- * After a Team Leader ends a duty, charters can keep charting for this long so a
- * report they had already started isn't lost.
- * MUST match the interval in can_chart_for_event() in supabase/batch9-end-duty.sql.
+ * Legacy grace window kept for the old duty-ended UI. The current schema has no
+ * ended_at column, so events mapped from it always stay open.
  */
 export const CHARTING_GRACE_MINUTES = 30;
 

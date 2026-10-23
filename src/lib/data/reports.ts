@@ -1,136 +1,175 @@
 import { createClient } from "@/lib/supabase";
-import { sanitizeSearch } from "@/lib/data/search";
-import type { Report, ReportStatus, VitalsReading } from "@/types/domain";
+import type { Report, ReportStatus, Sex, VitalsReading } from "@/types/domain";
+import {
+  countPatientReports,
+  createPatientReport,
+  getPatientReport,
+  listPatientReports,
+  reviewPatientReport,
+  type PatientReportWithRelations,
+} from "@/lib/data/patientReports";
+import { createPatient } from "@/lib/data/patients";
+import { addVitalSigns } from "@/lib/data/vitalSigns";
+import { addReportNote } from "@/lib/data/reportNotes";
+import { createNotification } from "@/lib/data/notifications";
 
-// FK hints (!reports_charter_id_fkey ...) are required because reports has
-// several foreign keys to profiles — without them PostgREST can't tell which
-// one we mean.
-const REPORT_SELECT = `
-  *,
-  event:events(title, date, location),
-  charter:profiles!reports_charter_id_fkey(full_name),
-  team_leader:profiles!reports_team_leader_id_fkey(full_name),
-  reviewer:profiles!reports_reviewed_by_fkey(full_name)
-`;
+export type { Report, ReportStatus, VitalsReading };
 
-type Named = { full_name: string | null } | null;
-type RawReport = Omit<
-  Report,
-  "event_title" | "event_date" | "event_location" | "charter_name" | "team_leader_name" | "reviewed_by_name" | "vitals_readings"
-> & {
-  event: { title: string; date: string; location: string | null } | null;
-  charter: Named;
-  team_leader: Named;
-  reviewer: Named;
-  vitals_readings?: VitalsReading[];
-};
+function localDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
-function flatten(raw: RawReport): Report {
-  const { event, charter, team_leader, reviewer, vitals_readings, ...rest } = raw;
+function nameOf(person: { first_name: string; last_name: string } | null | undefined): string | null {
+  if (!person) return null;
+  const name = `${person.first_name ?? ""} ${person.last_name ?? ""}`.trim();
+  return name || null;
+}
+
+function mapStatus(status: PatientReportWithRelations["status"]): ReportStatus {
+  return status === "Reviewed" ? "reviewed" : "submitted";
+}
+
+function mapVital(vital: PatientReportWithRelations["vital_signs"][number]): VitalsReading {
   return {
-    ...rest,
-    event_title: event?.title ?? null,
-    event_date: event?.date ?? null,
-    event_location: event?.location ?? null,
-    charter_name: charter?.full_name ?? null,
-    team_leader_name: team_leader?.full_name ?? null,
-    reviewed_by_name: reviewer?.full_name ?? null,
-    vitals_readings: [...(vitals_readings ?? [])].sort((a, b) =>
-      a.time_taken.localeCompare(b.time_taken)
-    ),
+    id: vital.id,
+    report_id: vital.patient_report_id,
+    time_taken: vital.created_at,
+    temp: vital.temperature,
+    pr: vital.pulse_rate_per_minute,
+    rr: vital.respiration_rate_per_minute,
+    bp_systolic: vital.blood_pressure_systolic,
+    bp_diastolic: vital.blood_pressure_diastolic,
+    spo2: vital.oxygen_level,
   };
 }
 
-/** Count of reports the admin can see (drafts are hidden by RLS). */
-export async function countReports(status?: ReportStatus, eventId?: string): Promise<number> {
+interface LeaderInfo {
+  user_id: string;
+  name: string | null;
+}
+
+async function teamLeadersByEvent(eventIds: string[]): Promise<Map<string, LeaderInfo>> {
+  const map = new Map<string, LeaderInfo>();
+  if (eventIds.length === 0) return map;
   const supabase = createClient();
-  let q = supabase.from("reports").select("id", { count: "exact", head: true });
-  if (status) q = q.eq("status", status);
-  if (eventId) q = q.eq("event_id", eventId);
-  const { count, error } = await q;
-  if (error) throw new Error(error.message);
-  return count ?? 0;
+  const { data, error } = await supabase
+    .from("event_members")
+    .select("event_id, user_id, user:users!event_members_user_id_fkey(first_name, last_name)")
+    .in("event_id", eventIds)
+    .in("member_role", ["TL", "Admin"]);
+  if (error) return map;
+  for (const row of (data ?? []) as unknown as {
+    event_id: string;
+    user_id: string;
+    user: { first_name: string; last_name: string } | null;
+  }[]) {
+    if (!map.has(row.event_id)) {
+      map.set(row.event_id, { user_id: row.user_id, name: nameOf(row.user) });
+    }
+  }
+  return map;
+}
+
+function flatten(raw: PatientReportWithRelations, leaders: Map<string, LeaderInfo>): Report {
+  const patient = raw.patient;
+  const event = patient?.event ?? null;
+  const notes = [...(raw.report_notes ?? [])].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const latestNote = notes.at(-1) ?? null;
+  const leader = event ? leaders.get(event.id) : undefined;
+  const reviewed = raw.status === "Reviewed";
+
+  return {
+    id: raw.id,
+    event_id: event?.id ?? "",
+    charter_id: raw.reported_by,
+    team_leader_id: leader?.user_id ?? null,
+    patient_id: raw.patient_id,
+    student_id: patient?.student_id ?? null,
+    chief_complaint: raw.chief_complaint,
+    patient_name: patient?.name ?? "",
+    age: patient?.age ?? null,
+    sex: (patient?.sex as Sex | undefined) ?? null,
+    address: patient?.address ?? null,
+    care_given: raw.care_given,
+    signature_url: raw.signature_url,
+    status: mapStatus(raw.status),
+    review_notes: latestNote?.content ?? null,
+    admin_notes: null,
+    reviewed_by: reviewed ? latestNote?.remarked_by ?? null : null,
+    submitted_at: raw.created_at,
+    reviewed_at: reviewed ? latestNote?.created_at ?? raw.updated_at : null,
+    synced_at: null,
+    created_at: raw.created_at,
+    updated_at: raw.updated_at,
+    event_title: event?.name ?? null,
+    event_date: event ? localDate(event.event_date) : null,
+    event_location: event?.location ?? null,
+    charter_name: nameOf(raw.reporter),
+    team_leader_name: leader?.name ?? null,
+    reviewed_by_name: reviewed ? nameOf(latestNote?.remarker) : null,
+    vitals_readings: (raw.vital_signs ?? []).map(mapVital).sort((a, b) => a.time_taken.localeCompare(b.time_taken)),
+  };
+}
+
+/** Count of reports the caller can see. */
+export async function countReports(status?: ReportStatus, eventId?: string): Promise<number> {
+  if (status === "draft") return 0;
+  return countPatientReports({
+    status: status === "reviewed" ? "Reviewed" : status === "submitted" ? "Pending" : undefined,
+    eventId,
+  });
 }
 
 export interface ListReportsParams {
   status?: ReportStatus;
   eventId?: string;
-  /** Only reports from these events (e.g. the duties a Team Leader leads). */
   eventIds?: string[];
   charterId?: string;
   search?: string;
   limit?: number;
-  /** Drafts are only visible to their own charter (RLS); admins never see them. */
   includeDrafts?: boolean;
 }
 
 export async function listReports(params: ListReportsParams = {}): Promise<Report[]> {
-  const { status, eventId, eventIds, charterId, search, limit = 100, includeDrafts = false } = params;
-  if (eventIds && eventIds.length === 0) return []; // .in() with an empty list is an error
-  const supabase = createClient();
-  let q = supabase
-    .from("reports")
-    .select(REPORT_SELECT)
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  if (!includeDrafts) q = q.neq("status", "draft");
-  if (status) q = q.eq("status", status);
-  if (eventId) q = q.eq("event_id", eventId);
-  if (eventIds) q = q.in("event_id", eventIds);
-  if (charterId) q = q.eq("charter_id", charterId);
-  const term = search ? sanitizeSearch(search) : "";
-  if (term) q = q.ilike("patient_name", `%${term}%`);
+  const { status, eventId, eventIds, charterId, search, limit = 100 } = params;
+  if (eventIds && eventIds.length === 0) return [];
+  if (status === "draft") return [];
 
-  const { data, error } = await q;
-  if (error) throw new Error(error.message);
-  return ((data ?? []) as unknown as RawReport[]).map(flatten);
+  const rows = await listPatientReports({
+    eventId,
+    eventIds,
+    reportedBy: charterId,
+    search,
+    limit,
+    status: status === "reviewed" ? "Reviewed" : status === "submitted" ? "Pending" : undefined,
+  });
+  const leaders = await teamLeadersByEvent([
+    ...new Set(rows.map((row) => row.patient?.event?.id).filter((id): id is string => Boolean(id))),
+  ]);
+  return rows.map((row) => flatten(row, leaders));
 }
 
-/** Returns null when the report doesn't exist (or RLS hides it, e.g. a draft). */
 export async function getReport(id: string): Promise<Report | null> {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("reports")
-    .select(`${REPORT_SELECT}, vitals_readings(*)`)
-    .eq("id", id)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return data ? flatten(data as unknown as RawReport) : null;
+  const raw = await getPatientReport(id);
+  if (!raw) return null;
+  const eventId = raw.patient?.event?.id;
+  const leaders = await teamLeadersByEvent(eventId ? [eventId] : []);
+  return flatten(raw, leaders);
 }
 
-/**
- * Every submitted / reviewed report of one event, with its vitals, for the Excel
- * export. Drafts are left out (admins can't see them anyway). Oldest first, so the
- * spreadsheet reads in the order patients were seen.
- * Supabase returns at most 1000 rows per request by default; an event with more
- * reports than that would need paging.
- */
 export async function listReportsForExport(eventId: string): Promise<Report[]> {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("reports")
-    .select(`${REPORT_SELECT}, vitals_readings(*)`)
-    .eq("event_id", eventId)
-    .neq("status", "draft")
-    .order("created_at", { ascending: true })
-    .limit(1000);
-  if (error) throw new Error(error.message);
-  return ((data ?? []) as unknown as RawReport[]).map(flatten);
+  const rows = await listPatientReports({ eventId, limit: 1000, ascending: true });
+  const leaders = await teamLeadersByEvent([eventId]);
+  return rows.map((row) => flatten(row, leaders));
 }
 
 export async function saveAdminNotes(id: string, notes: string): Promise<void> {
-  const supabase = createClient();
-  // .select() so a policy that silently blocks the update shows up as 0 rows
-  // instead of a fake "saved" toast.
-  const { data, error } = await supabase
-    .from("reports")
-    .update({ admin_notes: notes.trim() })
-    .eq("id", id)
-    .select("id");
-  if (error) throw new Error(error.message);
-  if (!data || data.length === 0) {
-    throw new Error("Couldn't save — you may not have permission to edit this report.");
-  }
+  const trimmed = notes.trim();
+  if (!trimmed) return;
+  await addReportNote(id, trimmed);
 }
 
 // ---------------------------------------------------------------------------
@@ -155,18 +194,13 @@ export interface SubmitReportInput {
   chief_complaint: string;
   patient_name: string;
   patient_age: string;
-  patient_sex: "M" | "F";
+  patient_sex: Sex;
   patient_address: string;
   vitals: VitalFormRow[];
   care_given: string;
   signaturePath: string;
 }
 
-/**
- * Empty -> null. Otherwise it must be a real number (a decimal comma is accepted,
- * "36,5" -> 36.5) or we stop and say which field, instead of quietly saving blank
- * patient data.
- */
 function parseNumber(value: string, label: string, opts: { int?: boolean } = {}): number | null {
   const text = value.trim().replace(",", ".");
   if (text === "") return null;
@@ -177,77 +211,74 @@ function parseNumber(value: string, label: string, opts: { int?: boolean } = {})
   return n;
 }
 
-/**
- * Saves the report and its vitals in one transaction via the submit_report()
- * database function. The database refuses it unless this charter is verified
- * for an event happening today.
- */
-export async function submitReport(input: SubmitReportInput): Promise<string> {
+async function notifyTeamLeader(input: SubmitReportInput): Promise<void> {
   const supabase = createClient();
-
-  // Team Leader on duty for this event (first one if there are several).
-  const { data: leaders, error: leaderError } = await supabase
-    .from("event_assignments")
+  const { data, error } = await supabase
+    .from("event_members")
     .select("user_id")
     .eq("event_id", input.eventId)
-    .eq("duty_role", "team_leader")
+    .in("member_role", ["TL", "Admin"])
     .limit(1);
-  if (leaderError) throw new Error(leaderError.message);
+  if (error || !data || data.length === 0) return;
+  try {
+    await createNotification({
+      receiver_id: (data[0] as { user_id: string }).user_id,
+      type: "Report Pending",
+      event_id: input.eventId,
+      patient_report_id: input.id,
+    });
+  } catch {
+    // A missing notification must never lose the patient report.
+  }
+}
 
+export async function submitReport(input: SubmitReportInput): Promise<string> {
   const age = parseNumber(input.patient_age, "Age", { int: true });
+  if (age === null) throw new Error("Age is required.");
 
   const vitals = input.vitals.map((v, i) => {
     const where = `Vitals check ${i + 1}`;
     const taken = new Date(`${input.eventDate}T${v.time}`);
     if (Number.isNaN(taken.getTime())) throw new Error(`${where}: the time isn't valid.`);
     return {
-      // "14:30" on the event's date, in the browser's local time zone -> UTC timestamp
-      time_taken: taken.toISOString(),
-      temp: parseNumber(v.temp, `${where} temperature`),
-      pr: parseNumber(v.pr, `${where} pulse rate`, { int: true }),
-      rr: parseNumber(v.rr, `${where} respiratory rate`, { int: true }),
-      bp_systolic: parseNumber(v.bp_sys, `${where} systolic BP`, { int: true }),
-      bp_diastolic: parseNumber(v.bp_dia, `${where} diastolic BP`, { int: true }),
-      spo2: parseNumber(v.spo2, `${where} SpO₂`, { int: true }),
+      patient_report_id: input.id,
+      created_at: taken.toISOString(),
+      temperature: parseNumber(v.temp, `${where} temperature`),
+      pulse_rate_per_minute: parseNumber(v.pr, `${where} pulse rate`, { int: true }),
+      respiration_rate_per_minute: parseNumber(v.rr, `${where} respiratory rate`, { int: true }),
+      blood_pressure_systolic: parseNumber(v.bp_sys, `${where} systolic BP`, { int: true }),
+      blood_pressure_diastolic: parseNumber(v.bp_dia, `${where} diastolic BP`, { int: true }),
+      oxygen_level: parseNumber(v.spo2, `${where} SpO₂`, { int: true }),
     };
   });
 
-  const { data, error } = await supabase.rpc("submit_report", {
-    p_report: {
-      id: input.id,
-      event_id: input.eventId,
-      team_leader_id: leaders?.[0]?.user_id ?? null,
-      chief_complaint: input.chief_complaint.trim(),
-      patient_name: input.patient_name.trim(),
-      age,
-      sex: input.patient_sex,
-      address: input.patient_address.trim(),
-      care_given: input.care_given.trim(),
-      signature_url: input.signaturePath,
-    },
-    p_vitals: vitals,
+  const patient = await createPatient({
+    name: input.patient_name,
+    student_id: null,
+    age,
+    sex: input.patient_sex,
+    event_id: input.eventId,
+    address: input.patient_address,
   });
-  if (error) {
-    if (error.code === "42501" || /row-level security/i.test(error.message)) {
-      throw new Error(
-        "Charting isn't open for you on this duty. You need Team Leader approval, and the duty must not have been ended."
-      );
-    }
-    throw new Error(error.message);
-  }
-  return data as string;
+
+  await createPatientReport({
+    id: input.id,
+    patient_id: patient.id,
+    chief_complaint: input.chief_complaint,
+    care_given: input.care_given,
+    signature_url: input.signaturePath,
+    status: "Pending",
+  });
+
+  await addVitalSigns(vitals);
+  await notifyTeamLeader(input);
+  return input.id;
 }
 
 // ---------------------------------------------------------------------------
 // Team Leader: reviewing a report
 // ---------------------------------------------------------------------------
 
-/**
- * Marks a submitted report as reviewed. The database function checks that you
- * lead this report's event and records who reviewed it and when.
- */
 export async function reviewReport(id: string, notes: string): Promise<void> {
-  const supabase = createClient();
-  const { error } = await supabase.rpc("review_report", { p_report: id, p_notes: notes });
-  if (error) throw new Error(error.message);
+  await reviewPatientReport(id, notes);
 }

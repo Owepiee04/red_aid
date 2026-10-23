@@ -1,26 +1,20 @@
 import { createClient } from "@/lib/supabase";
+import { updateMyUserRow } from "@/lib/data/users";
 
 export const MIN_PASSWORD_LENGTH = 8;
 
-/**
- * Saves the signed-in person's own name and photo through the
- * update_my_profile database function (it can't touch role, duty role
- * or active, so nobody can promote themselves from the Settings page).
- * Pass photoPath = null to remove the photo.
- */
-export async function updateMyProfile(fullName: string, photoPath: string | null): Promise<void> {
-  const supabase = createClient();
-  const { error } = await supabase.rpc("update_my_profile", {
-    p_full_name: fullName,
-    p_photo_url: photoPath,
-  });
-  if (error) throw new Error(error.message);
+function splitName(fullName: string): { first_name: string; last_name: string } {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { first_name: "", last_name: "" };
+  if (parts.length === 1) return { first_name: parts[0], last_name: "" };
+  return { first_name: parts[0], last_name: parts.slice(1).join(" ") };
 }
 
-/**
- * Changes the password after checking the current one, so someone who picks
- * up an unlocked phone can't lock the owner out of their account.
- */
+export async function updateMyProfile(fullName: string, photoPath: string | null): Promise<void> {
+  const { first_name, last_name } = splitName(fullName);
+  await updateMyUserRow({ first_name, last_name, pfp_img_url: photoPath });
+}
+
 export async function changePassword(email: string, currentPassword: string, newPassword: string): Promise<void> {
   if (newPassword.length < MIN_PASSWORD_LENGTH) {
     throw new Error(`Use at least ${MIN_PASSWORD_LENGTH} characters for the new password.`);

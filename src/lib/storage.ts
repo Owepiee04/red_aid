@@ -14,7 +14,7 @@ export function dataUrlToBlob(dataUrl: string): Blob {
 
 /**
  * Uploads a signature to the private bucket at <userId>/<reportId>.png and
- * returns that storage path (this is what gets saved in reports.signature_url).
+ * returns that storage path (this is what gets saved in patient_reports.signature_url).
  * upsert makes a retry after a failed submit safe.
  */
 export async function uploadSignature(userId: string, reportId: string, dataUrl: string): Promise<string> {
@@ -44,7 +44,7 @@ const AVATAR_TTL_SECONDS = 3600;
 // signed links are remembered in memory until shortly before they expire.
 const avatarCache = new Map<string, { url: string; expiresAt: number }>();
 
-/** Turns profiles.photo_url into something an <img> can load, or null if it can't. */
+/** Turns users.pfp_img_url into something an <img> can load, or null if it can't. */
 export async function getAvatarUrl(photo: string): Promise<string | null> {
   if (/^https?:\/\//i.test(photo)) return photo; // already a full URL
   const cached = avatarCache.get(photo);
