@@ -10,7 +10,8 @@ import { Label } from "@/components/ui/label";
 import AuthLayout from "@/components/AuthLayout";
 import PasswordInput from "@/components/PasswordInput";
 import SignUpSteps from "@/components/SignUpSteps";
-import { MIN_PASSWORD_LENGTH, signUp } from "@/lib/auth-client";
+import { MIN_PASSWORD_LENGTH } from "@/lib/auth-client";
+import { signUp } from "@/actions/auth";
 import { cn } from "@/lib/utils";
 
 // Step 1 of 2: create the account. Supabase then emails a 6-digit code and
@@ -38,12 +39,13 @@ export default function SignUpPage() {
     setError("");
     setLoading(true);
 
-    const result = await signUp({ firstName, lastName, email, password });
-
+    const result = await signUp(email, password, firstName, lastName);
+    console.log(result.status)
     if (result.status === "code_sent") {
       router.push(`/verify-email?email=${encodeURIComponent(email.trim())}&sent=1`);
       return;
     }
+    
     if (result.status === "signed_in") {
       router.push("/");
       router.refresh();
