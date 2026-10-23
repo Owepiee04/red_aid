@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase";
+import { User, Session } from "@supabase/supabase-js";
 
 // Auth helpers used by the login, sign-up, verify-email and password pages.
 //
@@ -28,7 +29,7 @@ export interface SignUpDetails {
 
 export type SignUpOutcome =
   /** Account created; a code was emailed. Go to the verify step. */
-  | { status: "code_sent" }
+  | { status: "code_sent", data : {user : User, session : Session | null} }
   /** Email confirmation is turned off in Supabase, so the user is already signed in. */
   | { status: "signed_in" }
   /** This email already has a confirmed account. */
@@ -44,7 +45,7 @@ export async function signUp({ firstName, lastName, email, password }: SignUpDet
   const supabase = createClient();
   const { data, error } = await supabase.auth.signUp({
     email: email.trim(),
-    password,
+    password : password,
     options: {
       data: { first_name: firstName.trim(), last_name: lastName.trim() },
     },
@@ -54,7 +55,7 @@ export async function signUp({ firstName, lastName, email, password }: SignUpDet
   // Supabase doesn't say "email taken" outright (so nobody can probe which
   // emails exist); it returns a user with no identities instead.
   if (data.user && (data.user.identities?.length ?? 0) === 0) return { status: "already_registered" };
-  return { status: "code_sent" };
+  return { status: "code_sent", data : data };
 }
 
 /** Checks the emailed code. On success the user is signed in. */
