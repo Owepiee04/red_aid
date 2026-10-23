@@ -19,9 +19,9 @@ import UserAvatar from "@/components/UserAvatar";
 import EmptyState from "@/components/EmptyState";
 import LoadingState from "@/components/LoadingState";
 import AddAccountDialog from "@/components/AddAccountDialog";
+import RoleSelect from "@/components/RoleSelect";
 import { useData } from "@/lib/useData";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
-import { ROLE_LABEL } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { listStaff, setAccountActive } from "@/lib/data/profiles";
 import type { DutyRole } from "@/types/auth";
@@ -65,7 +65,7 @@ export default function ManageAccountsPage() {
     <div>
       <PageHeader
         title="Manage Accounts"
-        description="Team Leaders and Charters in RedAid."
+        description="Team Leaders and Charters in RedAid. Use the role menu to switch someone between Charter and Team Leader."
         actions={
           <Button onClick={() => setAddOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
@@ -125,17 +125,8 @@ export default function ManageAccountsPage() {
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">{person.email}</span>
                 </span>
-                <span
-                  className={cn(
-                    "hidden shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium sm:inline-flex",
-                    person.duty_role === "team_leader"
-                      ? "border-primary/20 bg-accent text-accent-foreground"
-                      : "border-border bg-muted text-muted-foreground"
-                  )}
-                >
-                  {person.duty_role ? ROLE_LABEL[person.duty_role] : "Pending"}
-                </span>
               </button>
+              <RoleSelect person={person} onChanged={() => load()} />
               <div className="flex shrink-0 items-center gap-2">
                 <span className="hidden text-xs text-muted-foreground sm:inline">
                   {person.active ? "Active" : "Inactive"}
