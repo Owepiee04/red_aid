@@ -11,6 +11,7 @@ import LoadingState from "@/components/LoadingState";
 import StepIndicator from "@/components/report/StepIndicator";
 import StepPatient from "@/components/report/StepPatient";
 import StepVitals, { emptyVital, hasMeasurements } from "@/components/report/StepVitals";
+import { checkAge, hasVitalsErrors } from "@/lib/vitals";
 import StepCare from "@/components/report/StepCare";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/lib/useData";
@@ -74,11 +75,13 @@ export default function NewReportPage() {
     patient.chief_complaint.trim() !== "" &&
     patient.patient_name.trim() !== "" &&
     patient.patient_age !== "" &&
+    !checkAge(patient.patient_age).error &&
     patient.patient_address.trim() !== "";
 
   // Vitals are optional: a check can be left blank or partly filled. The only rule
   // is that a check with any measurement in it needs a time.
-  const stepTwoComplete = vitals.every((v) => !hasMeasurements(v) || v.time !== "");
+  // Impossible values (e.g. 365 °C, SpO₂ 150) also block Next; unusual ones only warn.
+  const stepTwoComplete = vitals.every((v) => !hasMeasurements(v) || (v.time !== "" && !hasVitalsErrors(v)));
 
   const stepThreeComplete = care.trim() !== "" && signature !== null;
 

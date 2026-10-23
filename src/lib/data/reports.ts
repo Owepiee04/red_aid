@@ -12,6 +12,7 @@ import { createPatient } from "@/lib/data/patients";
 import { addVitalSigns } from "@/lib/data/vitalSigns";
 import { addReportNote } from "@/lib/data/reportNotes";
 import { createNotification } from "@/lib/data/notifications";
+import { AGE_MAX, VITAL_RULES, checkVitalsRow, type VitalField } from "@/lib/vitals";
 
 export type { Report, ReportStatus, VitalsReading };
 
@@ -235,9 +236,16 @@ async function notifyTeamLeader(input: SubmitReportInput): Promise<void> {
 export async function submitReport(input: SubmitReportInput): Promise<string> {
   const age = parseNumber(input.patient_age, "Age", { int: true });
   if (age === null) throw new Error("Age is required.");
+  if (age < 0 || age > AGE_MAX) throw new Error(`Age must be 0–${AGE_MAX}.`);
 
   const vitals = input.vitals.map((v, i) => {
     const where = `Vitals check ${i + 1}`;
+    // Same checks the form shows, in case anything slips past the screen.
+    const problem = Object.entries(checkVitalsRow(v)).find(([, check]) => check?.error);
+    if (problem) {
+      const [field, check] = problem;
+      throw new Error(`${where} ${VITAL_RULES[field as VitalField].label.toLowerCase()}: ${check?.error}`);
+    }
     const taken = new Date(`${input.eventDate}T${v.time}`);
     if (Number.isNaN(taken.getTime())) throw new Error(`${where}: the time isn't valid.`);
     return {
