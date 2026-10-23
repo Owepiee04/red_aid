@@ -65,3 +65,24 @@ export async function setAccountActive(id: string, active: boolean): Promise<voi
     throw new Error("Couldn't update the account — you may not have permission.");
   }
 }
+
+/**
+ * Changes someone's default duty role (Team Leader or Charter). Only platform
+ * admins can: the "Platform admins can manage users" policy allows the update
+ * and the protect_user_privileges trigger blocks everyone else.
+ */
+export async function setDutyRole(id: string, dutyRole: DutyRole): Promise<void> {
+  if (!STAFF_ROLES.includes(dutyRole)) throw new Error("Choose Team Leader or Charter.");
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("users")
+    .update({ duty_role: dutyRole })
+    .eq("id", id)
+    .select("id, duty_role");
+  if (error) {
+    throw new Error(/roles or account status/i.test(error.message) ? "Only admins can change roles." : error.message);
+  }
+  if (!data || data.length === 0) {
+    throw new Error("Couldn't change the role — you may not have permission.");
+  }
+}
