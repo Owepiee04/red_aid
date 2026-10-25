@@ -30,6 +30,9 @@ export interface EventRecord {
   description: string | null;
   is_deleted: boolean;
   is_exported: boolean;
+  /** When a Team Leader/Admin pressed End Duty (null while the duty is open). */
+  ended_at: string | null;
+  ended_by: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
