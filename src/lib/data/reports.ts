@@ -11,7 +11,6 @@ import {
 import { createPatient } from "@/lib/data/patients";
 import { addVitalSigns } from "@/lib/data/vitalSigns";
 import { addReportNote } from "@/lib/data/reportNotes";
-import { createNotification } from "@/lib/data/notifications";
 import { AGE_MAX, VITAL_RULES, checkVitalsRow, type VitalField } from "@/lib/vitals";
 
 export type { Report, ReportStatus, VitalsReading };
@@ -212,22 +211,15 @@ function parseNumber(value: string, label: string, opts: { int?: boolean } = {})
   return n;
 }
 
-async function notifyTeamLeader(input: SubmitReportInput): Promise<void> {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("event_members")
-    .select("user_id")
-    .eq("event_id", input.eventId)
-    .in("member_role", ["TL", "Admin"])
-    .limit(1);
-  if (error || !data || data.length === 0) return;
+/**
+ * Tells every Team Leader on the event that a report is waiting for review.
+ * Runs in the database (notify_report_submitted), which checks you wrote the
+ * report and always uses you as the sender.
+ */
+async function notifyTeamLeaders(reportId: string): Promise<void> {
   try {
-    await createNotification({
-      receiver_id: (data[0] as { user_id: string }).user_id,
-      type: "Report Pending",
-      event_id: input.eventId,
-      patient_report_id: input.id,
-    });
+    const supabase = createClient();
+    await supabase.rpc("notify_report_submitted", { p_report_id: reportId });
   } catch {
     // A missing notification must never lose the patient report.
   }
@@ -290,7 +282,7 @@ export async function submitReport(input: SubmitReportInput): Promise<string> {
   } catch (e) {
     throw closed(e);
   }
-  await notifyTeamLeader(input);
+  await notifyTeamLeaders(input.id);
   return input.id;
 }
 
