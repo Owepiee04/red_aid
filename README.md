@@ -24,7 +24,8 @@ Apply them with the Supabase CLI (`supabase db push`) or paste them in the SQL e
 Do these once per Supabase project; skipping any of them breaks login emails or account creation.
 
 1. **Database**: run every file in `supabase/migrations/` in filename order (the newest is
-   `20261023001400_app_glue.sql`, which adds the signup trigger and platform-admin flag).
+   `20261025000100_fix_verify_charter_permissions.sql`; `20261023001400_app_glue.sql` adds the
+   signup trigger and platform-admin flag).
 2. **Vercel environment variables** (Project → Settings → Environment Variables):
    `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `REDIRECT_URL`, and
    `SUPABASE_SERVICE_ROLE_KEY`. Set `REDIRECT_URL` to the deployed app URL, for example
