@@ -1,8 +1,9 @@
 import dayjs from "dayjs";
 
 /**
- * Legacy grace window kept for the old duty-ended UI. The current schema has no
- * ended_at column, so events mapped from it always stay open.
+ * Minutes charters can keep charting after a Team Leader/Admin presses End Duty.
+ * Must match the `interval '30 minutes'` in public.is_charting_open
+ * (supabase/migrations/20261025000200_end_duty.sql), which enforces it.
  */
 export const CHARTING_GRACE_MINUTES = 30;
 

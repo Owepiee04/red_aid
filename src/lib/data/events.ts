@@ -44,8 +44,8 @@ function toEventRow(event: EventRecord): EventRow {
     location: event.location,
     description: event.description,
     created_by: event.created_by,
-    ended_at: null,
-    ended_by: null,
+    ended_at: event.ended_at ?? null,
+    ended_by: event.ended_by ?? null,
     created_at: event.created_at,
     updated_at: event.updated_at,
     name: event.name,
@@ -329,12 +329,22 @@ export async function deleteEvent(id: string): Promise<void> {
   }
 }
 
-export async function endEvent(_eventId?: string): Promise<void> {
-  throw new Error("Ending a duty is not supported by the current database schema.");
+/**
+ * End Duty: stamps events.ended_at (via the end_event database function, which
+ * checks the caller is a platform Admin or the event's TL/Admin and writes the
+ * audit log). Charting stays open for CHARTING_GRACE_MINUTES afterwards.
+ */
+export async function endEvent(eventId: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc("end_event", { p_event_id: eventId });
+  if (error) throw new Error(error.message);
 }
 
-export async function reopenEvent(_eventId?: string): Promise<void> {
-  throw new Error("Reopening a duty is not supported by the current database schema.");
+/** Reopen Duty: clears ended_at so charting is open again. */
+export async function reopenEvent(eventId: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc("reopen_event", { p_event_id: eventId });
+  if (error) throw new Error(error.message);
 }
 
 export async function markEventExported(eventId: string): Promise<void> {
