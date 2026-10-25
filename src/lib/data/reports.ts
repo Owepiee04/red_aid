@@ -260,25 +260,36 @@ export async function submitReport(input: SubmitReportInput): Promise<string> {
     };
   });
 
-  const patient = await createPatient({
-    name: input.patient_name,
-    student_id: null,
-    age,
-    sex: input.patient_sex,
-    event_id: input.eventId,
-    address: input.patient_address,
-  });
+  // The database refuses new charting when the charter isn't verified, or the duty
+  // was ended more than CHARTING_GRACE_MINUTES ago; say that instead of "row-level security".
+  const closed = (e: unknown) =>
+    e instanceof Error && /row-level security/i.test(e.message)
+      ? new Error("Charting is closed for this duty (it was ended, or you're no longer verified). Ask your Team Leader.")
+      : e;
 
-  await createPatientReport({
-    id: input.id,
-    patient_id: patient.id,
-    chief_complaint: input.chief_complaint,
-    care_given: input.care_given,
-    signature_url: input.signaturePath,
-    status: "Pending",
-  });
+  try {
+    const patient = await createPatient({
+      name: input.patient_name,
+      student_id: null,
+      age,
+      sex: input.patient_sex,
+      event_id: input.eventId,
+      address: input.patient_address,
+    });
 
-  await addVitalSigns(vitals);
+    await createPatientReport({
+      id: input.id,
+      patient_id: patient.id,
+      chief_complaint: input.chief_complaint,
+      care_given: input.care_given,
+      signature_url: input.signaturePath,
+      status: "Pending",
+    });
+
+    await addVitalSigns(vitals);
+  } catch (e) {
+    throw closed(e);
+  }
   await notifyTeamLeader(input);
   return input.id;
 }
