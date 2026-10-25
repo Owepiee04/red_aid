@@ -14,7 +14,7 @@ be changed or replaced without touching the rest of the app.
 | Signal drops | An amber strip at the top: "You're offline. You can still submit reports…" |
 | Taps **Submit** with no signal | "Saved on this phone". The report goes into **Waiting to send** on Home |
 | Signal comes back | Saved reports send by themselves (also every 30 s, and when the app comes back to the front). A blue strip says "Sending…" |
-| Duty was closed when it arrives (ended more than 30 min ago) | The report stays on the phone marked in red: "This duty is closed… Ask your Team Leader to reopen the duty, then tap Send now." The Team Leader taps **Reopen Duty**, the charter taps **Send now** (or waits; RedAid keeps trying), then the TL ends the duty again |
+| Duty was closed when it arrives (ended more than 30 min ago, or the charter was unverified) | The report stays on the phone marked in red: "This duty is closed… Ask your Team Leader to reopen the duty or verify you again, then tap Send now." The Team Leader taps **Reopen Duty**, the charter taps **Send now** (or waits; RedAid keeps trying), then the TL ends the duty again |
 | App closes / phone locks / page reloads mid-form | The form comes back: "We brought back the report you were filling in". The signature has to be drawn again |
 | Taps **Log out** with reports waiting | Warning: they stay on this phone and only send when *that same person* logs in here again |
 | Taps **Log out** with no signal | "You're offline. Logging out needs signal." |

@@ -60,7 +60,7 @@ type SendResult = { kind: "sent" } | { kind: "no_signal" } | { kind: "refused"; 
 
 function explain(error: Error): string {
   if (error instanceof ChartingClosedError) {
-    return "This duty is closed for new reports. Ask your Team Leader to reopen the duty, then tap Send now.";
+    return "This duty is closed for new reports (it was ended, or you're no longer verified). Ask your Team Leader to reopen the duty or verify you again, then tap Send now.";
   }
   return `${error.message} Tap Send now to try again.`;
 }
