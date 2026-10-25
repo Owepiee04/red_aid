@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import AuthLayout from "@/components/AuthLayout";
 import PasswordInput from "@/components/PasswordInput";
 import { signIn } from "@/actions/auth";
-import { isEmailNotConfirmed } from "@/lib/auth-client";
+import { isAccountBanned, isEmailNotConfirmed } from "@/lib/auth-client";
 
 // People create their own account at /signup and confirm it with the link
 // Supabase emails them; the link brings them back here with ?confirmed=1.
@@ -49,6 +49,12 @@ export default function LoginPage() {
           .
         </>
       );
+      setLoading(false);
+      return;
+    }
+
+    if (signInError && isAccountBanned(signInError.message)) {
+      setError("This account has been deactivated. Ask your chapter Admin if you think this is a mistake.");
       setLoading(false);
       return;
     }

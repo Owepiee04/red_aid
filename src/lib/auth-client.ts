@@ -99,6 +99,11 @@ export async function updatePassword(newPassword: string): Promise<{ error: { me
   return { error };
 }
 
+/** True when Supabase refused a login because an Admin deactivated the account. */
+export function isAccountBanned(message: string | undefined | null): boolean {
+  return !!message && /banned/i.test(message);
+}
+
 /** True when Supabase refused a login because the email hasn't been verified yet. */
 export function isEmailNotConfirmed(message: string | undefined | null): boolean {
   return !!message && /email not confirmed/i.test(message);

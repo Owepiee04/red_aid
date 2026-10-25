@@ -53,16 +53,25 @@ export async function getProfile(id: string): Promise<Profile | null> {
   return data ? toProfile(data as UserRecord) : null;
 }
 
+/**
+ * Activates or deactivates an account. Goes through our server route
+ * (src/app/api/admin/accounts/active/route.ts), because deactivating also blocks
+ * the login in Supabase Auth, which needs the service-role key.
+ */
 export async function setAccountActive(id: string, active: boolean): Promise<void> {
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from("users")
-    .update({ is_active: active })
-    .eq("id", id)
-    .select("id");
-  if (error) throw new Error(error.message);
-  if (!data || data.length === 0) {
-    throw new Error("Couldn't update the account — you may not have permission.");
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  if (!token) throw new Error("You're signed out. Please log in again.");
+
+  const response = await fetch("/api/admin/accounts/active", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ id, active }),
+  });
+  const body = (await response.json().catch(() => ({}))) as { error?: string };
+  if (!response.ok) {
+    throw new Error(body.error ?? `Couldn't update the account (error ${response.status}).`);
   }
 }
 
