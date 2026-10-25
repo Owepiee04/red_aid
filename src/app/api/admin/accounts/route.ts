@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getSiteOrigin } from "@/lib/supabase-server";
 
 // Runs ONLY on the server. SUPABASE_SERVICE_ROLE_KEY has no NEXT_PUBLIC_ prefix on
 // purpose: that is what keeps it out of the browser. Never rename it to add one.
@@ -63,8 +64,8 @@ export async function POST(request: Request) {
     ? await admin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: metadata })
     : await admin.auth.admin.inviteUserByEmail(email, {
         data: metadata,
-        // Lands on the page that lets them choose a password.
-        redirectTo: `${new URL(request.url).origin}/reset-password`,
+        // /auth/accept-invite signs them in from the link, then lets them choose a password.
+        redirectTo: `${await getSiteOrigin()}/auth/accept-invite`,
       });
 
   if (created.error || !created.data.user) {
