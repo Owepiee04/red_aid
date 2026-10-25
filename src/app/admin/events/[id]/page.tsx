@@ -13,6 +13,7 @@ import LoadingState from "@/components/LoadingState";
 import EventFormDialog from "@/components/EventFormDialog";
 import EndDutyControl from "@/components/EndDutyControl";
 import ExportEventButton from "@/components/ExportEventButton";
+import CharterVerifyActions from "@/components/CharterVerifyActions";
 import { useData } from "@/lib/useData";
 import { fmtDateLong, fmtDateTimeStamp, fmtTime } from "@/lib/formatting";
 import { getEvent } from "@/lib/data/events";
@@ -95,26 +96,28 @@ export default function EventDetailPage() {
 
         <SectionCard
           title="Assigned Charters"
-          subtitle="Verified charters can chart patients on this duty"
+          subtitle="Verified charters can chart patients on this duty. Verify or revoke them here."
           contentClassName="space-y-3"
         >
           {event.charters.length === 0 && (
             <p className="text-sm text-muted-foreground">No charters assigned.</p>
           )}
           {event.charters.map((person) => (
-            <button
-              key={person.user_id}
-              type="button"
-              onClick={() => router.push(`/admin/accounts/${person.user_id}`)}
-              className="flex w-full items-center gap-3 rounded-xl px-1 py-1 text-left transition-colors hover:bg-muted/50"
-            >
-              <UserAvatar uri={person.photo_url} name={person.name} className="h-10 w-10" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{person.name || "Unnamed"}</p>
-                <p className="text-xs text-muted-foreground">Charter</p>
-              </div>
-              <StatusBadge kind="verification" status={person.verified ? "verified" : "pending"} />
-            </button>
+            <div key={person.user_id} className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => router.push(`/admin/accounts/${person.user_id}`)}
+                className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-1 py-1 text-left transition-colors hover:bg-muted/50"
+              >
+                <UserAvatar uri={person.photo_url} name={person.name} className="h-10 w-10" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{person.name || "Unnamed"}</p>
+                  <p className="text-xs text-muted-foreground">Charter</p>
+                </div>
+                <StatusBadge kind="verification" status={person.verified ? "verified" : "pending"} />
+              </button>
+              <CharterVerifyActions eventId={event.id} person={person} onChanged={load} />
+            </div>
           ))}
         </SectionCard>
       </div>
