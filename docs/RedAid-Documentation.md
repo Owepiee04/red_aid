@@ -251,7 +251,7 @@ Add the same three to Vercel → Project Settings → Environment Variables.
 Supabase → Authentication → Users → *Add user*, then run the commented "first admin" block at the end of `batch2-core-tables.sql` with that email.
 
 ### 5. Auth URLs
-Supabase → Authentication → URL Configuration: set **Site URL** to the deployed address and add `http://localhost:3000/**` and the Vercel address (`…/**`) to **Redirect URLs**, so invite and reset emails land on the right page.
+Supabase → Authentication → URL Configuration: set **Site URL** to the deployed address and add `http://localhost:3000/**` and the Vercel address (`…/**`) to **Redirect URLs**, so sign-up confirmation and password-reset emails land on the right page.
 
 ### 6. Run
 ```bash
@@ -259,7 +259,7 @@ npm run dev      # http://localhost:3000
 ```
 
 ### Adding people
-Admin → Manage Accounts → *Add New*. Either an **email invite** (the person sets their own password) or a **temporary password** (no email is sent — useful when adding many people, because Supabase's built-in email sending allows only a few messages per hour).
+People register themselves at `/signup` and confirm their email; every new account starts as a Charter. Admins don't create or invite accounts. In Admin → Manage Accounts they switch people between Charter and Team Leader (role menu) and activate or deactivate accounts. Admins are promoted in the database (`users.is_admin`).
 
 ---
 
