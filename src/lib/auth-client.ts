@@ -70,6 +70,39 @@ export async function resendConfirmationEmail(email: string): Promise<{ error: s
   return { error: error ? friendlyAuthError(error.message) : null };
 }
 
+export type ChangeSignupEmailResult =
+  | { ok: true; email: string; sent: boolean; warning?: string }
+  | { ok: false; error: string; code?: "wrong_password" | "already_confirmed" | "email_taken" };
+
+/**
+ * "Wrong email? Change it": moves a still-unconfirmed sign-up to the corrected
+ * email and sends the confirmation there. Needs the password they signed up
+ * with (checked on the server, src/app/api/auth/change-signup-email/route.ts).
+ */
+export async function changeSignupEmail(
+  oldEmail: string,
+  newEmail: string,
+  password: string
+): Promise<ChangeSignupEmailResult> {
+  const response = await fetch("/api/auth/change-signup-email", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ oldEmail, newEmail, password }),
+  }).catch(() => null);
+  if (!response) return { ok: false, error: "Couldn't reach RedAid. Check your connection and try again." };
+  const body = (await response.json().catch(() => ({}))) as {
+    email?: string;
+    sent?: boolean;
+    warning?: string;
+    error?: string;
+    code?: "wrong_password" | "already_confirmed" | "email_taken";
+  };
+  if (!response.ok || !body.email) {
+    return { ok: false, error: body.error ?? `Something went wrong (error ${response.status}).`, code: body.code };
+  }
+  return { ok: true, email: body.email, sent: !!body.sent, warning: body.warning };
+}
+
 export async function signIn(email: string, password: string): Promise<AuthResult> {
   const supabase = createClient();
   const { data, error } = await supabase.auth.signInWithPassword({
