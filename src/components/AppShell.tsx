@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { LogOut, ShieldOff } from "lucide-react";
 import RedAidLogo from "@/components/RedAidLogo";
 import UserAvatar from "@/components/UserAvatar";
+import NotificationBell from "@/components/NotificationBell";
 import LoadingState from "@/components/LoadingState";
 import { useAuth } from "@/contexts/AuthContext";
 import { ROLE_LABEL, homePathFor, navFor, roleOf, type Role } from "@/lib/roles";
@@ -90,9 +91,12 @@ export default function AppShell({ role, children }: AppShellProps) {
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border bg-card lg:flex">
         <div className="px-6 pb-4 pt-6">
-          <Link href={items[0]?.to ?? "/"} aria-label="RedAid home">
-            <RedAidLogo />
-          </Link>
+          <div className="flex items-center justify-between gap-2">
+            <Link href={items[0]?.to ?? "/"} aria-label="RedAid home">
+              <RedAidLogo />
+            </Link>
+            <NotificationBell role={role} placement="sidebar" />
+          </div>
           <p className="mt-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             {ROLE_LABEL[role]}
           </p>
@@ -145,6 +149,7 @@ export default function AppShell({ role, children }: AppShellProps) {
           <RedAidLogo className="[&>span:first-child]:h-8 [&>span:first-child]:w-8" />
         </Link>
         <div className="flex items-center gap-1">
+          <NotificationBell role={role} placement="topbar" />
           {settingsPath && (
             <Link href={settingsPath} aria-label="Settings" className="rounded-full p-1">
               <UserAvatar uri={user?.photo_url} name={name} className="h-8 w-8" textClassName="text-xs" />
