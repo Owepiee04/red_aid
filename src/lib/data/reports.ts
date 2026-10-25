@@ -2,14 +2,11 @@ import { createClient } from "@/lib/supabase";
 import type { Report, ReportStatus, Sex, VitalsReading } from "@/types/domain";
 import {
   countPatientReports,
-  createPatientReport,
   getPatientReport,
   listPatientReports,
   reviewPatientReport,
   type PatientReportWithRelations,
 } from "@/lib/data/patientReports";
-import { createPatient } from "@/lib/data/patients";
-import { addVitalSigns } from "@/lib/data/vitalSigns";
 import { addReportNote } from "@/lib/data/reportNotes";
 import { AGE_MAX, VITAL_RULES, checkVitalsRow, type VitalField } from "@/lib/vitals";
 
@@ -211,19 +208,6 @@ function parseNumber(value: string, label: string, opts: { int?: boolean } = {})
   return n;
 }
 
-/**
- * Tells every Team Leader on the event that a report is waiting for review.
- * Runs in the database (notify_report_submitted), which checks you wrote the
- * report and always uses you as the sender.
- */
-async function notifyTeamLeaders(reportId: string): Promise<void> {
-  try {
-    const supabase = createClient();
-    await supabase.rpc("notify_report_submitted", { p_report_id: reportId });
-  } catch {
-    // A missing notification must never lose the patient report.
-  }
-}
 
 export async function submitReport(input: SubmitReportInput): Promise<string> {
   const age = parseNumber(input.patient_age, "Age", { int: true });
@@ -241,7 +225,6 @@ export async function submitReport(input: SubmitReportInput): Promise<string> {
     const taken = new Date(`${input.eventDate}T${v.time}`);
     if (Number.isNaN(taken.getTime())) throw new Error(`${where}: the time isn't valid.`);
     return {
-      patient_report_id: input.id,
       created_at: taken.toISOString(),
       temperature: parseNumber(v.temp, `${where} temperature`),
       pulse_rate_per_minute: parseNumber(v.pr, `${where} pulse rate`, { int: true }),
@@ -259,30 +242,29 @@ export async function submitReport(input: SubmitReportInput): Promise<string> {
       ? new Error("Charting is closed for this duty (it was ended, or you're no longer verified). Ask your Team Leader.")
       : e;
 
-  try {
-    const patient = await createPatient({
-      name: input.patient_name,
-      student_id: null,
-      age,
-      sex: input.patient_sex,
-      event_id: input.eventId,
-      address: input.patient_address,
-    });
-
-    await createPatientReport({
-      id: input.id,
-      patient_id: patient.id,
-      chief_complaint: input.chief_complaint,
-      care_given: input.care_given,
-      signature_url: input.signaturePath,
-      status: "Pending",
-    });
-
-    await addVitalSigns(vitals);
-  } catch (e) {
-    throw closed(e);
+  // One database call saves the patient, report and vitals together (all or
+  // nothing), and also notifies the event's Team Leaders. Calling it again with
+  // the same report id is safe: if the first try was saved but the reply was
+  // lost (weak signal), it just returns the id instead of saving a duplicate.
+  const supabase = createClient();
+  const { error } = await supabase.rpc("submit_report", {
+    p_report_id: input.id,
+    p_event_id: input.eventId,
+    p_patient_name: input.patient_name,
+    p_patient_age: age,
+    p_patient_sex: input.patient_sex,
+    p_patient_address: input.patient_address,
+    p_chief_complaint: input.chief_complaint,
+    p_care_given: input.care_given,
+    p_signature_url: input.signaturePath,
+    p_vitals: vitals,
+  });
+  if (error) {
+    if (/failed to fetch|network|load failed/i.test(error.message)) {
+      throw new Error("Couldn't reach RedAid, so your report may not have been sent. Tap Submit again when you have signal; it won't be saved twice.");
+    }
+    throw closed(new Error(error.message));
   }
-  await notifyTeamLeaders(input.id);
   return input.id;
 }
 
