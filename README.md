@@ -24,11 +24,12 @@ Apply them with the Supabase CLI (`supabase db push`) or paste them in the SQL e
 Do these once per Supabase project; skipping any of them breaks login emails or account creation.
 
 1. **Database**: run every file in `supabase/migrations/` in filename order (the newest is
-   `20261025000400_submit_report.sql`; `20261023001400_app_glue.sql` adds the
+   `20261025000500_notifications_review_cleanup.sql`; `20261023001400_app_glue.sql` adds the
    signup trigger and platform-admin flag).
 2. **Vercel environment variables** (Project → Settings → Environment Variables):
-   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `REDIRECT_URL`, and
-   `SUPABASE_SERVICE_ROLE_KEY`. Set `REDIRECT_URL` to the deployed app URL, for example
+   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `REDIRECT_URL`,
+   `SUPABASE_SERVICE_ROLE_KEY`, and `CRON_SECRET` (any long random string; it protects the daily
+   cleanup job below). Set `REDIRECT_URL` to the deployed app URL, for example
    `https://redaid.vercel.app` (never `localhost`; the app ignores a localhost value on Vercel).
    After changing environment variables, **redeploy** (Deployments → ⋯ → Redeploy); Vercel
    only applies them to new deployments.
@@ -74,3 +75,12 @@ on `auth.users`. One-time Supabase settings:
    **Project Settings → Authentication → SMTP Settings**, connect a sender such as a Gmail
    account with an App Password, Brevo, or Resend, then raise
    **Authentication → Rate Limits → emails per hour**.
+
+## Patient data is deleted 7 days after export
+The first **Export to Excel** on an event (Admin → event page) asks for confirmation and starts a
+7-day countdown; the event page shows the deletion date. Every day at 3:00 AM (Philippine time) a
+Vercel Cron job (`vercel.json` → `/api/cron/cleanup-exported`) permanently deletes the patients,
+reports, vitals, notes and signature images of events exported more than 7 days ago, hides the
+event, and records it in the event audit log. Exporting again doesn't restart the countdown.
+The job needs `CRON_SECRET` and `SUPABASE_SERVICE_ROLE_KEY` in Vercel; check it under
+Vercel → Project → Settings → Cron Jobs (you can also run it once from there).

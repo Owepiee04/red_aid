@@ -33,6 +33,9 @@ export interface EventRecord {
   /** When a Team Leader/Admin pressed End Duty (null while the duty is open). */
   ended_at: string | null;
   ended_by: string | null;
+  /** First Excel export; patient data is deleted 7 days later. */
+  exported_at: string | null;
+  patient_data_deleted_at: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -70,6 +73,10 @@ export interface PatientReport {
   signature_url: string | null;
   status: PatientReportStatus;
   reported_by: string;
+  /** Set by the database when the report becomes Reviewed. */
+  reviewed_by: string | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -118,6 +125,8 @@ export interface Notification {
   id: string;
   receiver_id: string;
   sender_id: string;
+  /** Sender's name when it was sent (filled in by the database). */
+  sender_name: string | null;
   type: NotificationType;
   event_id: string | null;
   vital_signs_id: string | null;
@@ -155,6 +164,9 @@ export interface EventRow {
   name?: string;
   is_deleted?: boolean;
   is_exported?: boolean;
+  /** First Excel export; patient data is deleted EXPORT_RETENTION_DAYS later. */
+  exported_at?: string | null;
+  patient_data_deleted_at?: string | null;
 }
 
 /** One person on duty for an event, with their profile joined in. */
