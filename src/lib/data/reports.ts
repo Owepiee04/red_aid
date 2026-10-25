@@ -75,6 +75,7 @@ function flatten(raw: PatientReportWithRelations, leaders: Map<string, LeaderInf
   const event = patient?.event ?? null;
   const notes = [...(raw.report_notes ?? [])].sort((a, b) => a.created_at.localeCompare(b.created_at));
   const latestNote = notes.at(-1) ?? null;
+  const firstNote = notes[0] ?? null;
   const leader = event ? leaders.get(event.id) : undefined;
   const reviewed = raw.status === "Reviewed";
 
@@ -95,9 +96,11 @@ function flatten(raw: PatientReportWithRelations, leaders: Map<string, LeaderInf
     status: mapStatus(raw.status),
     review_notes: latestNote?.content ?? null,
     admin_notes: null,
-    reviewed_by: reviewed ? latestNote?.remarked_by ?? null : null,
+    // Recorded by the database when the report was reviewed (older reports fall
+    // back to the first note's author).
+    reviewed_by: reviewed ? raw.reviewed_by ?? firstNote?.remarked_by ?? null : null,
     submitted_at: raw.created_at,
-    reviewed_at: reviewed ? latestNote?.created_at ?? raw.updated_at : null,
+    reviewed_at: reviewed ? raw.reviewed_at ?? firstNote?.created_at ?? raw.updated_at : null,
     synced_at: null,
     created_at: raw.created_at,
     updated_at: raw.updated_at,
@@ -106,7 +109,7 @@ function flatten(raw: PatientReportWithRelations, leaders: Map<string, LeaderInf
     event_location: event?.location ?? null,
     charter_name: nameOf(raw.reporter),
     team_leader_name: leader?.name ?? null,
-    reviewed_by_name: reviewed ? nameOf(latestNote?.remarker) : null,
+    reviewed_by_name: reviewed ? raw.reviewed_by_name ?? nameOf(firstNote?.remarker) : null,
     vitals_readings: (raw.vital_signs ?? []).map(mapVital).sort((a, b) => a.time_taken.localeCompare(b.time_taken)),
   };
 }

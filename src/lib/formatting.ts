@@ -89,3 +89,18 @@ export function initialsOf(name: string | null | undefined): string {
     .join("")
     .toUpperCase();
 }
+
+/** "just now", "5m ago", "3h ago", "Yesterday", "Mon", "Oct 23": short relative times for lists. */
+export function timeAgo(value: DateInput, now: Date = new Date()): string {
+  if (!value) return "";
+  const then = dayjs(value);
+  if (!then.isValid()) return "";
+  const minutes = Math.round((now.getTime() - then.valueOf()) / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24 && then.isSame(now, "day")) return `${hours}h ago`;
+  if (then.isSame(dayjs(now).subtract(1, "day"), "day")) return "Yesterday";
+  if (dayjs(now).diff(then, "day") < 7) return then.format("ddd");
+  return then.format(then.isSame(now, "year") ? "MMM D" : "MMM D, YYYY");
+}

@@ -3,6 +3,28 @@ import type { Notification, NotificationType } from "@/types/domain";
 
 export type { Notification, NotificationType };
 
+/** A notification plus the event name, for the bell. */
+export interface NotificationItem extends Notification {
+  event: { name: string } | null;
+}
+
+/** Newest first, with the event name. Used by the notification bell. */
+export async function listMyNotificationItems(limit = 30): Promise<NotificationItem[]> {
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) return [];
+  const { data, error } = await supabase
+    .from("notifications")
+    .select("*, event:events!notifications_event_id_fkey(name)")
+    .eq("receiver_id", session.user.id)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as unknown as NotificationItem[];
+}
+
 export async function listMyNotifications(limit = 100): Promise<Notification[]> {
   const supabase = createClient();
   const {

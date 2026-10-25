@@ -29,3 +29,15 @@ export function isChartingOpen(event: DutyLike, now: number = Date.now()): boole
   const closes = chartingClosesAt(event);
   return closes === null || now < closes.getTime();
 }
+
+/**
+ * Days after an event's first Excel export before its patient data is deleted.
+ * Must match `interval '7 days'` in public.purge_exported_events
+ * (supabase/migrations/20261025000500_notifications_review_cleanup.sql).
+ */
+export const EXPORT_RETENTION_DAYS = 7;
+
+/** When an exported event's patient data will be deleted, or null if not exported. */
+export function patientDataDeletesAt(event: { exported_at?: string | null }): Date | null {
+  return event.exported_at ? dayjs(event.exported_at).add(EXPORT_RETENTION_DAYS, "day").toDate() : null;
+}

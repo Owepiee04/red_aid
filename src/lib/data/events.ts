@@ -51,6 +51,8 @@ function toEventRow(event: EventRecord): EventRow {
     name: event.name,
     is_deleted: event.is_deleted,
     is_exported: event.is_exported,
+    exported_at: event.exported_at ?? null,
+    patient_data_deleted_at: event.patient_data_deleted_at ?? null,
   };
 }
 
@@ -362,6 +364,10 @@ export async function reopenEvent(eventId: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Records the event's first Excel export, which starts the countdown to deleting
+ * its patient data (EXPORT_RETENTION_DAYS). Exporting again doesn't restart it.
+ */
 export async function markEventExported(eventId: string): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase.rpc("mark_event_exported", { p_event_id: eventId });

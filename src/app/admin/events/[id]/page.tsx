@@ -17,6 +17,7 @@ import CharterVerifyActions from "@/components/CharterVerifyActions";
 import { useData } from "@/lib/useData";
 import { fmtDateLong, fmtDateTimeStamp, fmtTime } from "@/lib/formatting";
 import { getEvent } from "@/lib/data/events";
+import { EXPORT_RETENTION_DAYS, patientDataDeletesAt } from "@/lib/duty";
 
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -38,7 +39,7 @@ export default function EventDetailPage() {
         description={`${fmtDateLong(event.date)} · ${fmtTime(event.time)}`}
         actions={
           <>
-            <ExportEventButton event={event} />
+            <ExportEventButton event={event} onExported={load} />
             <EndDutyControl event={event} onChanged={load} />
             <Button variant="outline" onClick={() => setEditOpen(true)}>
               <Pencil className="mr-2 h-4 w-4" />
@@ -67,6 +68,18 @@ export default function EventDetailPage() {
               <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Duty status</dt>
               <dd className="mt-0.5 text-sm font-medium">
                 {event.ended_at ? `Ended ${fmtDateTimeStamp(event.ended_at)}` : "Open"}
+              </dd>
+            </div>
+            <div className="col-span-2 sm:col-span-4">
+              <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Patient data</dt>
+              <dd className="mt-0.5 text-sm font-medium">
+                {event.patient_data_deleted_at
+                  ? `Deleted ${fmtDateTimeStamp(event.patient_data_deleted_at)} (${EXPORT_RETENTION_DAYS} days after export)`
+                  : event.exported_at
+                    ? `Exported ${fmtDateTimeStamp(event.exported_at)} · will be deleted ${fmtDateLong(
+                        patientDataDeletesAt(event)!.toISOString()
+                      )}`
+                    : "Kept until the reports are exported"}
               </dd>
             </div>
             <div className="col-span-2 sm:col-span-4">
