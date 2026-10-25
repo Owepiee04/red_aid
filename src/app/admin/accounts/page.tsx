@@ -20,6 +20,7 @@ import EmptyState from "@/components/EmptyState";
 import LoadingState from "@/components/LoadingState";
 import AddAccountDialog from "@/components/AddAccountDialog";
 import RoleSelect from "@/components/RoleSelect";
+import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/lib/useData";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ type RoleFilter = "all" | DutyRole;
 export default function ManageAccountsPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [addOpen, setAddOpen] = useState(false);
@@ -50,7 +52,10 @@ export default function ManageAccountsPage() {
     const next = !person.active;
     try {
       await setAccountActive(person.id, next);
-      toast({ title: next ? "Account activated" : "Account deactivated" });
+      toast({
+        title: next ? "Account activated" : "Account deactivated",
+        description: next ? "They can log in again." : "They're logged out and can't log in until you reactivate them.",
+      });
       await load();
     } catch (e) {
       toast({
@@ -134,7 +139,9 @@ export default function ManageAccountsPage() {
                 <Switch
                   checked={person.active}
                   onCheckedChange={() => toggleActive(person)}
-                  aria-label="Active account"
+                  // You can't deactivate yourself (the server refuses it too).
+                  disabled={person.id === user?.id}
+                  aria-label={person.id === user?.id ? "Your account (can't deactivate yourself)" : "Active account"}
                 />
               </div>
             </div>

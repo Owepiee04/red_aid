@@ -271,7 +271,6 @@ export async function saveEvent(input: SaveEventInput): Promise<string> {
 
   const eventDate = toTimestamp(input.date, input.time);
   let eventId = input.id ?? "";
-  let creatorId = user.id;
 
   if (input.id) {
     const { data, error } = await supabase
@@ -283,10 +282,9 @@ export async function saveEvent(input: SaveEventInput): Promise<string> {
         description: input.description.trim() || null,
       })
       .eq("id", input.id)
-      .select("id, created_by");
+      .select("id");
     if (error) throw new Error(error.message);
     if (!data || data.length === 0) throw new Error("Event not found.");
-    creatorId = (data[0] as { created_by: string }).created_by;
   } else {
     const { data, error } = await supabase
       .from("events")
@@ -303,8 +301,10 @@ export async function saveEvent(input: SaveEventInput): Promise<string> {
     eventId = (data as { id: string }).id;
   }
 
+  // The Admin who creates or edits the event is NOT added to it: platform Admins
+  // can already see and manage every event, and being a member made them show up
+  // as a Team Leader. (Saving an older event removes its old creator membership.)
   const desired = new Map<string, MemberRole>();
-  if (creatorId) desired.set(creatorId, "Admin");
   for (const id of input.teamLeaderIds) {
     if (!desired.has(id)) desired.set(id, "TL");
   }
@@ -353,8 +353,3 @@ export async function markEventExported(eventId: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-export async function cleanupExportedEvents(): Promise<void> {
-  const supabase = createClient();
-  const { error } = await supabase.rpc("cleanup_exported_events");
-  if (error) throw new Error(error.message);
-}

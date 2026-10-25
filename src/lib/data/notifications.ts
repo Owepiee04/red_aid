@@ -3,16 +3,6 @@ import type { Notification, NotificationType } from "@/types/domain";
 
 export type { Notification, NotificationType };
 
-export interface CreateNotificationInput {
-  receiver_id: string;
-  type: NotificationType;
-  event_id?: string | null;
-  vital_signs_id?: string | null;
-  note_id?: string | null;
-  patient_report_id?: string | null;
-  sender_id?: string;
-}
-
 export async function listMyNotifications(limit = 100): Promise<Notification[]> {
   const supabase = createClient();
   const {
@@ -71,25 +61,6 @@ export async function markAllNotificationsRead(): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-export async function createNotification(input: CreateNotificationInput): Promise<string> {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("You're signed out. Please log in again.");
-
-  const { data, error } = await supabase.rpc("create_notification", {
-    p_receiver_id: input.receiver_id,
-    p_sender_id: input.sender_id ?? user.id,
-    p_type: input.type,
-    p_event_id: input.event_id ?? null,
-    p_vital_signs_id: input.vital_signs_id ?? null,
-    p_note_id: input.note_id ?? null,
-    p_patient_report_id: input.patient_report_id ?? null,
-  });
-  if (error) throw new Error(error.message);
-  return data as string;
-}
 
 export async function deleteNotification(id: string): Promise<void> {
   const supabase = createClient();
