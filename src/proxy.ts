@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 // Pages anyone can open without being logged in. "/auth" covers
-// /auth/confirm, /auth/reset, /auth/callback (email links) and /auth/auth-code-error.
+// /auth/callback (email links) and /auth/auth-code-error.
 const PUBLIC_PATHS = ["/login", "/signup", "/verify-email", "/forgot-password", "/reset-password", "/auth"];
 
 const isPublic = (pathname: string) =>
@@ -23,8 +23,7 @@ export async function proxy(request: NextRequest) {
   // /?token_hash=...; hand them to the callback instead of losing them.
   if (pathname === "/" && (searchParams.has("code") || searchParams.has("token_hash"))) {
     const url = request.nextUrl.clone();
-    // Links that fell back to the Site URL are almost always sign-up confirmations.
-    url.pathname = searchParams.has("token_hash") ? "/auth/callback" : "/auth/confirm";
+    url.pathname = "/auth/callback";
     return NextResponse.redirect(url);
   }
 
@@ -58,7 +57,6 @@ export async function proxy(request: NextRequest) {
     url.search = "";
     return NextResponse.redirect(url);
   }
-
   return response;
 }
 
