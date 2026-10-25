@@ -33,6 +33,10 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
+    if (newPassword.length < 8) {
+      setError("Use at least 8 characters.");
+      return;
+    }
     if (newPassword !== confirmPassword) {
       setError("Passwords do not match");
       return;
@@ -73,7 +77,11 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <AuthLayout icon={Lock} title="New password" subtitle="Enter your new password below">
+    <AuthLayout
+      icon={Lock}
+      title="New password"
+      subtitle="Enter your new password below"
+    >
       {error && (
         <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
           {error}
@@ -125,7 +133,7 @@ export default function ResetPasswordPage() {
           {loading ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Resetting...
+              Saving...
             </>
           ) : (
             "Reset password"

@@ -24,7 +24,7 @@ Apply them with the Supabase CLI (`supabase db push`) or paste them in the SQL e
 Do these once per Supabase project; skipping any of them breaks login emails or account creation.
 
 1. **Database**: run every file in `supabase/migrations/` in filename order (the newest is
-   `20261025000300_security_hardening.sql`; `20261023001400_app_glue.sql` adds the
+   `20261025000400_submit_report.sql`; `20261023001400_app_glue.sql` adds the
    signup trigger and platform-admin flag).
 2. **Vercel environment variables** (Project → Settings → Environment Variables):
    `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `REDIRECT_URL`, and
@@ -46,7 +46,8 @@ Do these once per Supabase project; skipping any of them breaks login emails or 
    update public.users set is_admin = true
    where id = (select id from auth.users where email = 'you@example.com');
    ```
-   Every other account is created from Admin → Accounts inside the app.
+   Everyone else signs up at `/signup` and starts as a Charter; promote Team Leaders from
+   Admin → Accounts (role menu).
 5. Log in on a phone, open the browser menu, and choose **Add to Home Screen** / **Install app**.
 
 ## Sign-up and email confirmation
