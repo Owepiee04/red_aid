@@ -10,6 +10,10 @@ import {
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase";
 import type { AppUser } from "@/types/auth";
+import { isNetworkError } from "@/lib/offline/network";
+
+/** loadProfile couldn't reach the server (no signal): keep showing who was signed in. */
+const NO_SIGNAL = "no-signal" as const;
 
 interface AuthContextValue {
   user: AppUser | null;
@@ -38,13 +42,14 @@ interface UserRow {
 async function loadProfile(
   supabase: SupabaseClient,
   session: Session
-): Promise<AppUser | null> {
+): Promise<AppUser | null | typeof NO_SIGNAL> {
   const { data, error } = await supabase
     .from("users")
     .select("id, first_name, last_name, pfp_img_url, is_admin, duty_role, is_active")
     .eq("id", session.user.id)
     .maybeSingle();
 
+  if (error && isNetworkError(error)) return NO_SIGNAL;
   if (error || !data) return null;
   const row = data as UserRow;
   return {
@@ -73,7 +78,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       const profile = await loadProfile(supabase, session);
-      setUser(profile);
+      // Offline mode: the phone lost signal while the app was open (e.g. it
+      // re-checks the login when you come back to the app). Don't sign the
+      // charter out of the screen just because the profile couldn't load.
+      if (profile !== NO_SIGNAL) setUser(profile);
       setIsLoadingAuth(false);
       setAuthChecked(true);
     };
@@ -104,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     const profile = await loadProfile(supabase, session);
-    setUser(profile);
+    if (profile !== NO_SIGNAL) setUser(profile);
   };
 
   return (

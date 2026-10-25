@@ -201,6 +201,12 @@ export interface SubmitReportInput {
   signaturePath: string;
 }
 
+/** submitReport couldn't reach the server (no signal). Offline mode keeps the report and retries. */
+export class NetworkError extends Error {}
+
+/** The server refused new charting: the duty is closed or the charter is no longer verified. */
+export class ChartingClosedError extends Error {}
+
 function parseNumber(value: string, label: string, opts: { int?: boolean } = {}): number | null {
   const text = value.trim().replace(",", ".");
   if (text === "") return null;
@@ -242,7 +248,7 @@ export async function submitReport(input: SubmitReportInput): Promise<string> {
   // was ended more than CHARTING_GRACE_MINUTES ago; say that instead of "row-level security".
   const closed = (e: unknown) =>
     e instanceof Error && /row-level security/i.test(e.message)
-      ? new Error("Charting is closed for this duty (it was ended, or you're no longer verified). Ask your Team Leader.")
+      ? new ChartingClosedError("Charting is closed for this duty (it was ended, or you're no longer verified). Ask your Team Leader.")
       : e;
 
   // One database call saves the patient, report and vitals together (all or
@@ -264,7 +270,7 @@ export async function submitReport(input: SubmitReportInput): Promise<string> {
   });
   if (error) {
     if (/failed to fetch|network|load failed/i.test(error.message)) {
-      throw new Error("Couldn't reach RedAid, so your report may not have been sent. Tap Submit again when you have signal; it won't be saved twice.");
+      throw new NetworkError("Couldn't reach RedAid, so your report may not have been sent. Tap Submit again when you have signal; it won't be saved twice.");
     }
     throw closed(new Error(error.message));
   }

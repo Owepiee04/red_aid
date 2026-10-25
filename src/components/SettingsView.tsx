@@ -13,12 +13,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ROLE_LABEL, roleOf } from "@/lib/roles";
 import { uploadAvatar } from "@/lib/storage";
 import { MIN_PASSWORD_LENGTH, changePassword, updateMyProfile } from "@/lib/data/me";
+import { useGuardedLogout } from "@/components/offline/useGuardedLogout";
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : "Something went wrong. Please try again.");
 
 /** The Settings page every role shares: profile (name, photo), password, log out. */
 export default function SettingsView() {
-  const { user, refreshUser, logout } = useAuth();
+  const { user, refreshUser } = useAuth();
+  // Warns first if reports are still waiting to send (offline mode).
+  const { requestLogout: logout, logoutDialog } = useGuardedLogout();
   const { toast } = useToast();
   const role = roleOf(user);
 
@@ -159,6 +162,7 @@ export default function SettingsView() {
               <LogOut />
               Log out
             </Button>
+            {logoutDialog}
           </SectionCard>
         </div>
       </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Clock, Lock, Plus, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,36 +10,53 @@ import SectionCard from "@/components/SectionCard";
 import EventCard from "@/components/EventCard";
 import ReportCardList from "@/components/ReportCardList";
 import LoadingState from "@/components/LoadingState";
+import OutboxCard from "@/components/offline/OutboxCard";
 import EmptyState from "@/components/EmptyState";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/lib/useData";
 import { chartingClosesAt, isChartingOpen } from "@/lib/duty";
 import { fmtDate, fmtTime, todayISO } from "@/lib/formatting";
-import { getTodaysDuty, listMyEvents } from "@/lib/data/events";
+import { listMyEvents } from "@/lib/data/events";
 import { listReports } from "@/lib/data/reports";
+import { loadTodaysDuty, onOutboxChange, tryOnline } from "@/lib/offline";
 
 export default function CharterHomePage() {
   const { user } = useAuth();
   const router = useRouter();
   const userId = user?.id;
 
-  const { data, loading, error } = useData(async () => {
+  const { data, loading, error, load } = useData(async () => {
     if (!userId) return null;
     const today = todayISO();
-    const [duty, upcoming, recent] = await Promise.all([
-      getTodaysDuty(userId, today),
-      listMyEvents({ userId, from: today, limit: 5 }),
-      listReports({ charterId: userId, includeDrafts: true, limit: 5 }),
+    // Offline mode: with no signal, today's duty is the last one seen online
+    // (so New Report still works) and the two lists are left empty.
+    const [todays, upcoming, recent] = await Promise.all([
+      loadTodaysDuty(userId, today),
+      tryOnline(() => listMyEvents({ userId, from: today, limit: 5 }), []),
+      tryOnline(() => listReports({ charterId: userId, includeDrafts: true, limit: 5 }), []),
     ]);
-    return { duty, upcoming, recent };
+    return { duty: todays.duty, offline: todays.offline, upcoming, recent };
   }, [userId]);
+
+  // Refresh when the signal comes back and when a saved report is sent.
+  useEffect(() => {
+    const reloadIfOnline = () => {
+      if (navigator.onLine) void load();
+    };
+    window.addEventListener("online", reloadIfOnline);
+    const stop = onOutboxChange(reloadIfOnline);
+    return () => {
+      window.removeEventListener("online", reloadIfOnline);
+      stop();
+    };
+  }, [load]);
 
   if (!data && loading) return <LoadingState />;
   if (!data) {
     return <EmptyState title="Couldn't load your dashboard" description={error ?? "Please try again."} />;
   }
 
-  const { duty, upcoming, recent } = data;
+  const { duty, offline, upcoming, recent } = data;
 
   // none     = nothing assigned today
   // ended    = the Team Leader ended the duty (and any grace period is over, or you weren't approved)
@@ -110,9 +128,13 @@ export default function CharterHomePage() {
           </Button>
         )}
 
+        <OutboxCard />
+
         <SectionCard title="Upcoming Events" contentClassName="space-y-3">
           {upcoming.length === 0 && (
-            <p className="text-sm text-muted-foreground">No upcoming events assigned to you.</p>
+            <p className="text-sm text-muted-foreground">
+              {offline ? "Upcoming events will show when you're back online." : "No upcoming events assigned to you."}
+            </p>
           )}
           {upcoming.map((event) => (
             <EventCard key={event.id} event={event} />
@@ -129,7 +151,7 @@ export default function CharterHomePage() {
           <ReportCardList
             reports={recent}
             onOpen={(report) => router.push(`/charter/reports/${report.id}`)}
-            emptyTitle="You haven't charted yet"
+            emptyTitle={offline ? "Your reports will show when you're back online" : "You haven't charted yet"}
           />
         </div>
       </div>

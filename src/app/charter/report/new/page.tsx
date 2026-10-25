@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, CloudOff, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import PageHeader from "@/components/PageHeader";
@@ -15,12 +15,26 @@ import { checkAge, hasVitalsErrors } from "@/lib/vitals";
 import StepCare from "@/components/report/StepCare";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/lib/useData";
-import { fmtTime, todayISO } from "@/lib/formatting";
-import { getTodaysDuty } from "@/lib/data/events";
+import { fmtDate, fmtTime, todayISO } from "@/lib/formatting";
 import { isChartingOpen } from "@/lib/duty";
-import { submitReport } from "@/lib/data/reports";
-import { uploadSignature } from "@/lib/storage";
+import {
+  clearDraft,
+  loadDraft,
+  loadTodaysDuty,
+  saveDraft,
+  submitOrQueue,
+  type ReportDraft,
+  type SubmitOutcome,
+} from "@/lib/offline";
 import type { PatientForm, VitalForm } from "@/types/report-form";
+
+const emptyPatient = (): PatientForm => ({
+  chief_complaint: "",
+  patient_name: "",
+  patient_age: "",
+  patient_sex: "M",
+  patient_address: "",
+});
 
 export default function NewReportPage() {
   const { user } = useAuth();
@@ -30,15 +44,9 @@ export default function NewReportPage() {
 
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [submitted, setSubmitted] = useState<SubmitOutcome | null>(null);
 
-  const [patient, setPatient] = useState<PatientForm>({
-    chief_complaint: "",
-    patient_name: "",
-    patient_age: "",
-    patient_sex: "M",
-    patient_address: "",
-  });
+  const [patient, setPatient] = useState<PatientForm>(emptyPatient);
   const [vitals, setVitals] = useState<VitalForm[]>(() => [emptyVital()]);
   const [care, setCare] = useState("");
   const [signature, setSignature] = useState<string | null>(null);
@@ -49,9 +57,10 @@ export default function NewReportPage() {
   if (!reportId.current) reportId.current = crypto.randomUUID();
 
   // Only a duty the charter is verified for — and that hasn't been ended — lets them chart.
+  // Offline mode: with no signal, this is the last duty seen online.
   const { data: duty, loading } = useData(async () => {
     if (!userId) return null;
-    const event = await getTodaysDuty(userId, todayISO());
+    const { duty: event } = await loadTodaysDuty(userId, todayISO());
     return event && isChartingOpen(event) ? event : null;
   }, [userId]);
 
@@ -63,9 +72,58 @@ export default function NewReportPage() {
     router.replace("/charter");
   }, [loading, duty, toast, router]);
 
+  // --- Offline mode: bring back a half-finished form, and keep saving it -----
+  const [restored, setRestored] = useState<ReportDraft | null>(null);
+  const [draftReady, setDraftReady] = useState(false);
+
+  useEffect(() => {
+    if (!userId || !duty || draftReady) return;
+    let cancelled = false;
+    loadDraft(userId, duty.id).then((draft) => {
+      if (cancelled) return;
+      if (draft) {
+        reportId.current = draft.reportId;
+        setPatient(draft.patient);
+        setVitals(draft.vitals.length ? draft.vitals : [emptyVital()]);
+        setCare(draft.care);
+        setStep(draft.step);
+        setRestored(draft);
+      }
+      setDraftReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, duty, draftReady]);
+
+  const pristine =
+    JSON.stringify(patient) === JSON.stringify(emptyPatient()) &&
+    care.trim() === "" &&
+    vitals.every((v) => !hasMeasurements(v));
+
+  useEffect(() => {
+    if (!draftReady || !userId || !duty || submitted || pristine) return;
+    const timer = setTimeout(() => {
+      void saveDraft({ userId, eventId: duty.id, reportId: reportId.current, step, patient, vitals, care });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [draftReady, userId, duty, submitted, pristine, step, patient, vitals, care]);
+
+  const startOver = () => {
+    if (userId) void clearDraft(userId);
+    reportId.current = crypto.randomUUID();
+    setPatient(emptyPatient());
+    setVitals([emptyVital()]);
+    setCare("");
+    setSignature(null);
+    setStep(1);
+    setRestored(null);
+  };
+  // ---------------------------------------------------------------------------
+
   useEffect(() => {
     if (!submitted) return;
-    const timer = setTimeout(() => router.push("/charter"), 1500);
+    const timer = setTimeout(() => router.push("/charter"), submitted === "queued" ? 3500 : 1500);
     return () => clearTimeout(timer);
   }, [submitted, router]);
 
@@ -89,18 +147,24 @@ export default function NewReportPage() {
     if (!signature) return;
     setBusy(true);
     try {
-      const signaturePath = await uploadSignature(userId, reportId.current, signature);
-      await submitReport({
-        id: reportId.current,
-        eventId: duty.id,
-        eventDate: duty.date,
-        ...patient,
-        vitals: vitals.filter(hasMeasurements), // blank checks aren't saved
-        care_given: care,
-        signaturePath,
+      // Offline mode: saved on the phone first, then sent. With no signal it
+      // stays saved ("queued") and sends automatically later.
+      const outcome = await submitOrQueue({
+        userId,
+        eventTitle: duty.title,
+        signature,
+        input: {
+          id: reportId.current,
+          eventId: duty.id,
+          eventDate: duty.date,
+          ...patient,
+          vitals: vitals.filter(hasMeasurements), // blank checks aren't saved
+          care_given: care,
+        },
       });
-      toast({ title: "Report submitted" });
-      setSubmitted(true);
+      await clearDraft(userId);
+      toast({ title: outcome === "sent" ? "Report submitted" : "Saved on this phone — it will send when you have signal" });
+      setSubmitted(outcome);
     } catch (e) {
       toast({
         variant: "destructive",
@@ -113,13 +177,29 @@ export default function NewReportPage() {
   };
 
   if (submitted) {
+    const queued = submitted === "queued";
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
-        <span className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-          <CheckCircle2 className="h-8 w-8" />
+        <span
+          className={`flex h-16 w-16 items-center justify-center rounded-full ${
+            queued ? "bg-amber-50 text-amber-600" : "bg-emerald-50 text-emerald-600"
+          }`}
+        >
+          {queued ? <CloudOff className="h-8 w-8" /> : <CheckCircle2 className="h-8 w-8" />}
         </span>
-        <h1 className="mt-5 font-heading text-2xl font-bold tracking-tight">Report submitted</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Coming back to your home dashboard…</p>
+        <h1 className="mt-5 font-heading text-2xl font-bold tracking-tight">
+          {queued ? "Saved on this phone" : "Report submitted"}
+        </h1>
+        <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+          {queued
+            ? "There's no signal, so the report will send automatically when you're back online. You'll see it under “Waiting to send” on Home until then."
+            : "Coming back to your home dashboard…"}
+        </p>
+        {queued && (
+          <Button className="mt-6" variant="outline" onClick={() => router.push("/charter")}>
+            Back to Home
+          </Button>
+        )}
       </div>
     );
   }
@@ -127,6 +207,19 @@ export default function NewReportPage() {
   return (
     <div>
       <PageHeader title="New Report" description={`${duty.title} · ${fmtTime(duty.time)}`} />
+
+      {restored && (
+        <div className="mb-5 flex flex-wrap items-start gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+          <History className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <p className="min-w-0 flex-1 leading-snug">
+            <strong className="font-semibold">We brought back the report you were filling in</strong> (last change{" "}
+            {fmtDate(restored.savedAt, "h:mm A")}). Check it, and sign again on the last step.
+          </p>
+          <button type="button" onClick={startOver} className="font-semibold underline underline-offset-2">
+            Start over
+          </button>
+        </div>
+      )}
 
       <div className="mb-5">
         <StepIndicator step={step} />

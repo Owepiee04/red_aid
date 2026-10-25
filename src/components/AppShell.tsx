@@ -7,6 +7,8 @@ import { LogOut, ShieldOff } from "lucide-react";
 import RedAidLogo from "@/components/RedAidLogo";
 import UserAvatar from "@/components/UserAvatar";
 import NotificationBell from "@/components/NotificationBell";
+import OfflineBanner from "@/components/offline/OfflineBanner";
+import { useGuardedLogout } from "@/components/offline/useGuardedLogout";
 import LoadingState from "@/components/LoadingState";
 import { useAuth } from "@/contexts/AuthContext";
 import { ROLE_LABEL, homePathFor, navFor, roleOf, type Role } from "@/lib/roles";
@@ -30,7 +32,9 @@ interface AppShellProps {
 export default function AppShell({ role, children }: AppShellProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, isLoadingAuth, isAuthenticated, logout } = useAuth();
+  const { user, isLoadingAuth, isAuthenticated } = useAuth();
+  // Log out, but warn first if reports are still waiting to send (offline mode).
+  const { requestLogout: logout, logoutDialog } = useGuardedLogout();
 
   const userRole = roleOf(user);
   const allowed = isAuthenticated && userRole === role;
@@ -71,6 +75,7 @@ export default function AppShell({ role, children }: AppShellProps) {
             Log out
           </button>
         </div>
+        {logoutDialog}
       </div>
     );
   }
@@ -167,8 +172,12 @@ export default function AppShell({ role, children }: AppShellProps) {
       </header>
 
       <main className="px-4 pb-28 pt-6 sm:px-6 lg:ml-64 lg:px-10 lg:pb-12 lg:pt-10">
-        <div className="mx-auto w-full max-w-6xl">{children}</div>
+        <div className="mx-auto w-full max-w-6xl">
+          <OfflineBanner role={role} />
+          {children}
+        </div>
       </main>
+      {logoutDialog}
 
       {/* Phone bottom tab bar */}
       <nav
