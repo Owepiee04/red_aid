@@ -46,7 +46,8 @@ Do these once per Supabase project; skipping any of them breaks login emails or 
    update public.users set is_admin = true
    where id = (select id from auth.users where email = 'you@example.com');
    ```
-   Every other account is created from Admin → Accounts inside the app.
+   Everyone else signs up at `/signup` and starts as a Charter; promote Team Leaders from
+   Admin → Accounts (role menu).
 5. Log in on a phone, open the browser menu, and choose **Add to Home Screen** / **Install app**.
 
 ## Sign-up and email confirmation

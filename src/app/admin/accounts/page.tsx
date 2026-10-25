@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, RotateCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { RotateCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -18,7 +17,6 @@ import PageHeader from "@/components/PageHeader";
 import UserAvatar from "@/components/UserAvatar";
 import EmptyState from "@/components/EmptyState";
 import LoadingState from "@/components/LoadingState";
-import AddAccountDialog from "@/components/AddAccountDialog";
 import RoleSelect from "@/components/RoleSelect";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/lib/useData";
@@ -36,7 +34,6 @@ export default function ManageAccountsPage() {
   const { user } = useAuth();
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
-  const [addOpen, setAddOpen] = useState(false);
   const debouncedSearch = useDebouncedValue(search, 300);
 
   const { data: users, loading, error, load } = useData(
@@ -70,13 +67,7 @@ export default function ManageAccountsPage() {
     <div>
       <PageHeader
         title="Manage Accounts"
-        description="Team Leaders and Charters in RedAid. Use the role menu to switch someone between Charter and Team Leader."
-        actions={
-          <Button onClick={() => setAddOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add New
-          </Button>
-        }
+        description="Everyone who signed up for RedAid. New accounts start as Charters; use the role menu to make someone a Team Leader."
       />
 
       <div className="mb-5 flex flex-col gap-3 sm:flex-row">
@@ -106,7 +97,7 @@ export default function ManageAccountsPage() {
         <EmptyState
           icon={RotateCw}
           title="No accounts found"
-          description="Try a different search, or add a new Team Leader or Charter."
+          description="Try a different search. People appear here after they sign up and confirm their email."
         />
       ) : (
         <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
@@ -149,7 +140,6 @@ export default function ManageAccountsPage() {
         </div>
       )}
 
-      <AddAccountDialog open={addOpen} onOpenChange={setAddOpen} onCreated={load} />
     </div>
   );
 }

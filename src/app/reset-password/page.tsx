@@ -19,12 +19,8 @@ export default function ResetPasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  // ?welcome=1 when coming from an invite (/auth/accept-invite): same form, but
-  // it's their first password, and afterwards they go straight into the app.
-  const [welcome, setWelcome] = useState(false);
 
   useEffect(() => {
-    setWelcome(new URLSearchParams(window.location.search).get("welcome") === "1");
     // Unlike base44's resetToken-in-the-URL flow, Supabase's reset email
     // link lands here with a recovery session the client SDK has already
     // set from the URL fragment — there's no token to read out ourselves.
@@ -57,11 +53,6 @@ export default function ResetPasswordPage() {
       setError(updateError.message || "Failed to reset password");
       return;
     }
-    if (welcome) {
-      // Already signed in from the invite link: go straight to their dashboard.
-      window.location.href = "/";
-      return;
-    }
     router.push("/login");
   };
 
@@ -88,8 +79,8 @@ export default function ResetPasswordPage() {
   return (
     <AuthLayout
       icon={Lock}
-      title={welcome ? "Set your password" : "New password"}
-      subtitle={welcome ? "Choose a password to finish setting up your account" : "Enter your new password below"}
+      title="New password"
+      subtitle="Enter your new password below"
     >
       {error && (
         <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
@@ -144,8 +135,6 @@ export default function ResetPasswordPage() {
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               Saving...
             </>
-          ) : welcome ? (
-            "Set password and continue"
           ) : (
             "Reset password"
           )}
