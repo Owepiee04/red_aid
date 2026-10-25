@@ -54,26 +54,41 @@ function toEventRow(event: EventRecord): EventRow {
   };
 }
 
+/**
+ * "2026-11-01".."2026-11-30" as the real start/end instants in the browser's
+ * time zone. Plain "2026-11-01T00:00:00" has no offset, so the database read it
+ * as UTC, 8 hours off in the Philippines: events before 8 AM on the 1st were
+ * left out of that month.
+ */
+function dayRange(start: string, end: string): { from: string; to: string } {
+  return {
+    from: new Date(`${start}T00:00:00`).toISOString(),
+    to: new Date(`${end}T23:59:59.999`).toISOString(),
+  };
+}
+
 export async function countEventsInRange(start: string, end: string): Promise<number> {
+  const { from, to } = dayRange(start, end);
   const supabase = createClient();
   const { count, error } = await supabase
     .from("events")
     .select("id", { count: "exact", head: true })
     .eq("is_deleted", false)
-    .gte("event_date", `${start}T00:00:00`)
-    .lte("event_date", `${end}T23:59:59.999`);
+    .gte("event_date", from)
+    .lte("event_date", to);
   if (error) throw new Error(error.message);
   return count ?? 0;
 }
 
 export async function listEventsInRange(start: string, end: string): Promise<EventRow[]> {
+  const { from, to } = dayRange(start, end);
   const supabase = createClient();
   const { data, error } = await supabase
     .from("events")
     .select("*")
     .eq("is_deleted", false)
-    .gte("event_date", `${start}T00:00:00`)
-    .lte("event_date", `${end}T23:59:59.999`)
+    .gte("event_date", from)
+    .lte("event_date", to)
     .order("event_date", { ascending: true })
     .limit(200);
   if (error) throw new Error(error.message);

@@ -42,9 +42,12 @@ export interface ListPatientReportsParams {
   ascending?: boolean;
 }
 
-const REPORT_SELECT = `
+// `inner` matters when filtering on the patient (event or name): with a normal
+// join, Supabase only blanks the patient on non-matching rows and still returns
+// the report, so every event's reports showed up (and were exported).
+const reportSelect = (inner: boolean) => `
   *,
-  patient:patients!patient_reports_patient_id_fkey(
+  patient:patients!patient_reports_patient_id_fkey${inner ? "!inner" : ""}(
     *,
     event:events!patients_event_id_fkey(*)
   ),
@@ -52,6 +55,7 @@ const REPORT_SELECT = `
   vital_signs(*),
   report_notes(*, remarker:users!report_notes_remarked_by_fkey(id, first_name, last_name, pfp_img_url))
 `;
+const REPORT_SELECT = reportSelect(false);
 
 export async function listPatientReports(params: ListPatientReportsParams = {}): Promise<PatientReportWithRelations[]> {
   const {
@@ -66,10 +70,13 @@ export async function listPatientReports(params: ListPatientReportsParams = {}):
   } = params;
   if (eventIds && eventIds.length === 0) return [];
 
+  const term = search ? sanitizeSearch(search) : "";
+  const filtersOnPatient = !!eventId || !!eventIds || !!term;
+
   const supabase = createClient();
   let q = supabase
     .from("patient_reports")
-    .select(REPORT_SELECT)
+    .select(reportSelect(filtersOnPatient))
     .order("created_at", { ascending })
     .limit(limit);
 
@@ -78,7 +85,6 @@ export async function listPatientReports(params: ListPatientReportsParams = {}):
   if (eventId) q = q.eq("patient.event_id", eventId);
   if (eventIds) q = q.in("patient.event_id", eventIds);
   if (reportedBy) q = q.eq("reported_by", reportedBy);
-  const term = search ? sanitizeSearch(search) : "";
   if (term) q = q.ilike("patient.name", `%${term}%`);
 
   const { data, error } = await q;
