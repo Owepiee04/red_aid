@@ -8,6 +8,8 @@ import { getAvatarUrl } from "@/lib/storage";
 interface UserAvatarProps {
   /** Photo location from profiles.photo_url (a storage path, or a full http(s) URL). */
   uri?: string | null;
+  /** Offline copy of the profile photo; used instead of fetching a signed URL. */
+  blob?: Blob | null;
   name?: string | null;
   className?: string;
   textClassName?: string;
@@ -16,6 +18,7 @@ interface UserAvatarProps {
 /** Profile photo (stored privately) with an initials fallback. */
 export default function UserAvatar({
   uri,
+  blob,
   name,
   className = "h-10 w-10",
   textClassName = "text-sm",
@@ -25,6 +28,16 @@ export default function UserAvatar({
   useEffect(() => {
     let alive = true;
     setUrl(null);
+
+    if (blob) {
+      const objectUrl = URL.createObjectURL(blob);
+      setUrl(objectUrl);
+      return () => {
+        alive = false;
+        URL.revokeObjectURL(objectUrl);
+      };
+    }
+
     if (!uri) return;
     getAvatarUrl(uri).then((resolved) => {
       if (alive) setUrl(resolved);
@@ -32,7 +45,7 @@ export default function UserAvatar({
     return () => {
       alive = false;
     };
-  }, [uri]);
+  }, [uri, blob]);
 
   if (url) {
     return (

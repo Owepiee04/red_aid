@@ -4,6 +4,7 @@ import { Geist } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { Toaster } from "@/components/ui/toaster";
+import OfflineDatabaseInitializer from "@/lib/indexed-db/OfflineDatabaseInitializer";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
     <html lang="en">
       <body className={`${geistSans.variable} min-h-screen font-sans antialiased`}>
         <AuthProvider>{children}</AuthProvider>
+        <OfflineDatabaseInitializer />
         <Toaster />
       </body>
     </html>

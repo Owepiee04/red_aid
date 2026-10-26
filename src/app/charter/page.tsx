@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Clock, Lock, Plus, ShieldAlert } from "lucide-react";
@@ -10,31 +11,131 @@ import EventCard from "@/components/EventCard";
 import ReportCardList from "@/components/ReportCardList";
 import LoadingState from "@/components/LoadingState";
 import EmptyState from "@/components/EmptyState";
+import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/lib/useData";
 import { chartingClosesAt, isChartingOpen } from "@/lib/duty";
 import { fmtDate, fmtTime, todayISO } from "@/lib/formatting";
-import { getTodaysDuty, listMyEvents } from "@/lib/data/events";
+import { checkConnection } from "@/lib/connectivity";
+import { listMyEvents, todaysDutyFrom } from "@/lib/data/events";
 import { listReports } from "@/lib/data/reports";
+import { cacheMyEvents, getCachedMyEvents } from "@/lib/indexed-db/cacheEvents";
+import { hasUnsyncedData, sync } from "@/lib/indexed-db/sync";
+import { getReportHistorySource } from "@/lib/report-history";
 
 export default function CharterHomePage() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const router = useRouter();
   const userId = user?.id;
+  const [online, setOnline] = useState<boolean | null>(null);
+  const syncing = useRef(false);
 
-  const { data, loading, error } = useData(async () => {
-    if (!userId) return null;
-    const today = todayISO();
-    const [duty, upcoming, recent] = await Promise.all([
-      getTodaysDuty(userId, today),
-      listMyEvents({ userId, from: today, limit: 5 }),
-      listReports({ charterId: userId, includeDrafts: true, limit: 5 }),
-    ]);
-    return { duty, upcoming, recent };
-  }, [userId]);
+  useEffect(() => {
+    let cancelled = false;
 
-  if (!data && loading) return <LoadingState />;
-  if (!data) {
+    const apply = (reachable: boolean) => {
+      if (!cancelled) setOnline(reachable);
+    };
+
+    const refresh = async () => {
+      apply(await checkConnection());
+    };
+
+    void refresh();
+    const onOnline = () => void refresh();
+    const onOffline = () => apply(false);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, []);
+
+  const homeKey = userId && online !== null ? `${userId}:${online}` : null;
+  const homeKeyRef = useRef(homeKey);
+  homeKeyRef.current = homeKey;
+  const [loadedHomeKey, setLoadedHomeKey] = useState<string | null>(null);
+
+  const { data, loading, error, load } = useData(async () => {
+    if (!homeKey || !userId || online === null) return null;
+    try {
+      const today = todayISO();
+
+      if (online) {
+        const [events, recent] = await Promise.all([
+          listMyEvents({ userId, limit: 500 }),
+          listReports({ charterId: userId, includeDrafts: true, limit: 5 }),
+        ]);
+        await cacheMyEvents(events);
+        return {
+          duty: todaysDutyFrom(events, today),
+          upcoming: events.filter((event) => event.date >= today).slice(0, 5),
+          recent,
+        };
+      }
+
+      const [events, recent] = await Promise.all([
+        getCachedMyEvents(),
+        getReportHistorySource(false).listReports(userId, "all"),
+      ]);
+      return {
+        duty: todaysDutyFrom(events, today),
+        upcoming: events.filter((event) => event.date >= today).slice(0, 5),
+        recent: recent.slice(0, 5),
+      };
+    } finally {
+      if (homeKeyRef.current === homeKey) setLoadedHomeKey(homeKey);
+    }
+  }, [homeKey, userId, online]);
+
+  useEffect(() => {
+    if (!userId || online !== true || syncing.current) return;
+    syncing.current = true;
+
+    const run = async () => {
+      try {
+        if (!(await hasUnsyncedData())) return;
+
+        toast({
+          title: "User is back online, now syncing offline reports.",
+          duration: 4000,
+        });
+
+        const result = await sync();
+
+        if (result.failed > 0) {
+          toast({
+            variant: "destructive",
+            title: "Some offline reports couldn't sync.",
+            description: result.errors[0],
+          });
+        } else if (result.synced > 0) {
+          toast({ title: "Offline reports synced." });
+        }
+
+        await load();
+      } catch (error) {
+        toast({
+          variant: "destructive",
+          title: "Couldn't sync offline reports.",
+          description: error instanceof Error ? error.message : "Please try again.",
+        });
+      } finally {
+        syncing.current = false;
+      }
+    };
+
+    void run();
+  }, [userId, online, load, toast]);
+
+  const pageLoading = homeKey === null || loading || loadedHomeKey !== homeKey;
+
+  if (pageLoading) return <LoadingState />;
+  if (error || !data) {
     return <EmptyState title="Couldn't load your dashboard" description={error ?? "Please try again."} />;
   }
 
@@ -48,7 +149,7 @@ export default function CharterHomePage() {
   const state = !duty ? "none" : canChart ? "approved" : duty.ended_at ? "ended" : "waiting";
   const closesAt = duty ? chartingClosesAt(duty) : null;
   const dutyLine = duty
-    ? `${duty.title} · ${fmtTime(duty.time)}${duty.location ? ` · ${duty.location}` : ""}`
+    ? `${duty.title}${duty.time ? ` · ${fmtTime(duty.time)}` : ""}${duty.location ? ` · ${duty.location}` : ""}`
     : "";
 
   const BANNER = {

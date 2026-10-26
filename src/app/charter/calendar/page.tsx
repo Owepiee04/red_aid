@@ -1,26 +1,73 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import CalendarMonth from "@/components/CalendarMonth";
 import SectionCard from "@/components/SectionCard";
+import LoadingState from "@/components/LoadingState";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/lib/useData";
 import { fmtDate, fmtTime, monthBounds, todayISO } from "@/lib/formatting";
+import { checkConnection } from "@/lib/connectivity";
 import { listMyEvents } from "@/lib/data/events";
+import { cacheMyEvents, getCachedMyEvents } from "@/lib/indexed-db/cacheEvents";
 
 export default function CharterCalendarPage() {
   const { user } = useAuth();
   const userId = user?.id;
   const [monthDate, setMonthDate] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(() => todayISO());
+  const [online, setOnline] = useState<boolean | null>(null);
   const bounds = monthBounds(monthDate);
 
-  const { data: events, error } = useData(
-    () => (userId ? listMyEvents({ userId, from: bounds.start, to: bounds.end }) : Promise.resolve([])),
-    [bounds.start, bounds.end, userId]
-  );
+  useEffect(() => {
+    let cancelled = false;
 
+    const apply = (reachable: boolean) => {
+      if (!cancelled) setOnline(reachable);
+    };
+
+    const refresh = async () => {
+      apply(await checkConnection());
+    };
+
+    void refresh();
+    const onOnline = () => void refresh();
+    const onOffline = () => apply(false);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, []);
+
+  const calendarKey = userId && online !== null ? `${userId}:${online}` : null;
+  const calendarKeyRef = useRef(calendarKey);
+  calendarKeyRef.current = calendarKey;
+  const [loadedCalendarKey, setLoadedCalendarKey] = useState<string | null>(null);
+
+  const { data: events, loading, error } = useData(async () => {
+    if (!calendarKey || !userId || online === null) return [];
+    try {
+      if (online) {
+        const all = await listMyEvents({ userId, limit: 500 });
+        await cacheMyEvents(all);
+        return all;
+      }
+      return await getCachedMyEvents();
+    } finally {
+      if (calendarKeyRef.current === calendarKey) setLoadedCalendarKey(calendarKey);
+    }
+  }, [calendarKey, userId, online]);
+
+  const pageLoading = calendarKey === null || loading || loadedCalendarKey !== calendarKey;
+
+  if (pageLoading) return <LoadingState />;
+
+  const monthEvents = (events ?? []).filter((event) => event.date >= bounds.start && event.date <= bounds.end);
   const dayEvents = (events ?? []).filter((event) => event.date === selectedDate);
 
   return (
@@ -33,7 +80,7 @@ export default function CharterCalendarPage() {
         <CalendarMonth
           monthDate={monthDate}
           onMonthChange={setMonthDate}
-          events={events ?? []}
+          events={monthEvents}
           selectedDate={selectedDate}
           onSelectDate={setSelectedDate}
         />
