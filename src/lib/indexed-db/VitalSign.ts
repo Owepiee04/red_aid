@@ -4,12 +4,12 @@ import type { OfflineVitalSign } from "./types";
 export interface CreateVitalSignInput {
   vitalId?: string;
   patientReportId: string;
-  temperature: number;
-  pulseRatePerMinute: number;
-  respirationRatePerMinute: number;
-  bloodPressureSystolic: number;
-  bloodPressureDiastolic: number;
-  oxygenLevel: number;
+  temperature: number | null;
+  pulseRatePerMinute: number | null;
+  respirationRatePerMinute: number | null;
+  bloodPressureSystolic: number | null;
+  bloodPressureDiastolic: number | null;
+  oxygenLevel: number | null;
   recordedAt?: string;
 }
 
