@@ -9,6 +9,11 @@ import {
 } from "react";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase";
+import {
+  cacheUserProfile,
+  cachedProfileToAppUser,
+  getCachedUserProfile,
+} from "@/lib/indexed-db/userProfile";
 import type { AppUser } from "@/types/auth";
 
 interface AuthContextValue {
@@ -45,7 +50,8 @@ async function loadProfile(
     .eq("id", session.user.id)
     .maybeSingle();
 
-  if (error || !data) return null;
+  if (error) throw new Error(error.message);
+  if (!data) return null;
   const row = data as UserRow;
   return {
     id: row.id,
@@ -56,6 +62,29 @@ async function loadProfile(
     active: row.is_active,
     photo_url: row.pfp_img_url,
   };
+}
+
+async function loadCachedProfile(userId: string): Promise<AppUser | null> {
+  try {
+    const profile = await getCachedUserProfile(userId);
+    return profile ? cachedProfileToAppUser(profile) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveProfile(supabase: SupabaseClient, session: Session): Promise<AppUser | null> {
+  if (typeof navigator !== "undefined" && !navigator.onLine) {
+    return loadCachedProfile(session.user.id);
+  }
+
+  try {
+    const profile = await loadProfile(supabase, session);
+    if (profile) void cacheUserProfile(profile).catch(() => {});
+    return profile;
+  } catch {
+    return loadCachedProfile(session.user.id);
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -72,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthChecked(true);
         return;
       }
-      const profile = await loadProfile(supabase, session);
+      const profile = await resolveProfile(supabase, session);
       setUser(profile);
       setIsLoadingAuth(false);
       setAuthChecked(true);
@@ -103,8 +132,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       return;
     }
-    const profile = await loadProfile(supabase, session);
-    setUser(profile);
+    try {
+      const profile = await loadProfile(supabase, session);
+      setUser(profile);
+      if (profile) await cacheUserProfile(profile).catch(() => {});
+    } catch {
+      setUser(await loadCachedProfile(session.user.id));
+    }
   };
 
   return (
