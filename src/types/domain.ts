@@ -219,6 +219,7 @@ export interface Report {
   care_given: string | null;
   signature_url: string | null;
   status: ReportStatus;
+  pending_sync?: boolean;
   review_notes: string | null;
   admin_notes: string | null;
   reviewed_by: string | null;

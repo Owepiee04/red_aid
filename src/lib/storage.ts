@@ -17,14 +17,18 @@ export function dataUrlToBlob(dataUrl: string): Blob {
  * returns that storage path (this is what gets saved in patient_reports.signature_url).
  * upsert makes a retry after a failed submit safe.
  */
-export async function uploadSignature(userId: string, reportId: string, dataUrl: string): Promise<string> {
+export async function uploadSignatureBlob(userId: string, reportId: string, blob: Blob): Promise<string> {
   const supabase = createClient();
   const path = `${userId}/${reportId}.png`;
   const { error } = await supabase.storage
     .from(BUCKET)
-    .upload(path, dataUrlToBlob(dataUrl), { contentType: "image/png", upsert: true });
+    .upload(path, blob, { contentType: "image/png", upsert: true });
   if (error) throw new Error(`Couldn't upload the signature: ${error.message}`);
   return path;
+}
+
+export async function uploadSignature(userId: string, reportId: string, dataUrl: string): Promise<string> {
+  return uploadSignatureBlob(userId, reportId, dataUrlToBlob(dataUrl));
 }
 
 /** Short-lived link for showing a stored signature (the bucket is private). */
