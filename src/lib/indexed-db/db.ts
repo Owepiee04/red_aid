@@ -1,8 +1,14 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
-import type { CachedEvent, OfflinePatient, OfflinePatientReport, OfflineVitalSign } from "./types";
+import type {
+  CachedEvent,
+  CachedUserProfile,
+  OfflinePatient,
+  OfflinePatientReport,
+  OfflineVitalSign,
+} from "./types";
 
 export const DB_NAME = "red_aid_offline";
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
 export interface RedAidOfflineDB extends DBSchema {
   Patient: {
@@ -31,6 +37,10 @@ export interface RedAidOfflineDB extends DBSchema {
   Event: {
     key: string;
     value: CachedEvent;
+  };
+  UserProfile: {
+    key: string;
+    value: CachedUserProfile;
   };
 }
 
@@ -63,6 +73,10 @@ export function getDB(): Promise<IDBPDatabase<RedAidOfflineDB>> {
 
         if (!db.objectStoreNames.contains("Event")) {
           db.createObjectStore("Event", { keyPath: "eventId" });
+        }
+
+        if (!db.objectStoreNames.contains("UserProfile")) {
+          db.createObjectStore("UserProfile", { keyPath: "userId" });
         }
       },
       terminated() {

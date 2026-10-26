@@ -1,4 +1,18 @@
+import type { DutyRole, PlatformRole } from "@/types/auth";
+
 export type Sex = "M" | "F" | "Others";
+
+export interface CachedUserProfile {
+  userId: string;
+  email: string;
+  fullName: string | null;
+  role: PlatformRole;
+  dutyRole: DutyRole | null;
+  active: boolean;
+  photoPath: string | null;
+  photoBlob: Blob | null;
+  cachedAt: string;
+}
 
 export interface OfflinePatient {
   patientId: string;
