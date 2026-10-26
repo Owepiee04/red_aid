@@ -15,11 +15,9 @@ import { checkAge, hasVitalsErrors } from "@/lib/vitals";
 import StepCare from "@/components/report/StepCare";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/lib/useData";
-import { fmtTime, todayISO } from "@/lib/formatting";
-import { getTodaysDuty } from "@/lib/data/events";
-import { isChartingOpen } from "@/lib/duty";
-import { submitReport } from "@/lib/data/reports";
-import { uploadSignature } from "@/lib/storage";
+import { fmtDate, fmtTime, todayISO } from "@/lib/formatting";
+import { checkConnection } from "@/lib/connectivity";
+import { getReportFlow } from "@/lib/report-flow";
 import type { PatientForm, VitalForm } from "@/types/report-form";
 
 export default function NewReportPage() {
@@ -31,6 +29,44 @@ export default function NewReportPage() {
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [savedOffline, setSavedOffline] = useState(false);
+  const [online, setOnline] = useState<boolean | null>(null);
+
+  const offlineNotified = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const apply = (reachable: boolean) => {
+      if (cancelled) return;
+      setOnline(reachable);
+      if (!reachable && !offlineNotified.current) {
+        offlineNotified.current = true;
+        toast({
+          title: "User is offline, now utilizing offline database.",
+          duration: 4000,
+        });
+      }
+      if (reachable) offlineNotified.current = false;
+    };
+
+    const refresh = async () => {
+      const reachable = await checkConnection();
+      apply(reachable);
+    };
+
+    void refresh();
+    const onOnline = () => void refresh();
+    const onOffline = () => apply(false);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, [toast]);
 
   const [patient, setPatient] = useState<PatientForm>({
     chief_complaint: "",
@@ -47,13 +83,24 @@ export default function NewReportPage() {
   // can't produce two copies of the same report.
   const reportId = useRef<string>("");
   if (!reportId.current) reportId.current = crypto.randomUUID();
+  const patientId = useRef<string>("");
+  if (!patientId.current) patientId.current = crypto.randomUUID();
 
-  // Only a duty the charter is verified for — and that hasn't been ended — lets them chart.
-  const { data: duty, loading } = useData(async () => {
-    if (!userId) return null;
-    const event = await getTodaysDuty(userId, todayISO());
-    return event && isChartingOpen(event) ? event : null;
-  }, [userId]);
+  const dutyKey = userId && online !== null ? `${userId}:${online}` : null;
+  const dutyKeyRef = useRef(dutyKey);
+  dutyKeyRef.current = dutyKey;
+  const [loadedDutyKey, setLoadedDutyKey] = useState<string | null>(null);
+
+  const { data: duty, loading: dutyLoading } = useData(async () => {
+    if (!dutyKey || !userId || online === null) return null;
+    try {
+      return await getReportFlow(online).loadDuty(userId, todayISO());
+    } finally {
+      if (dutyKeyRef.current === dutyKey) setLoadedDutyKey(dutyKey);
+    }
+  }, [dutyKey, userId, online]);
+
+  const loading = dutyKey === null || dutyLoading || loadedDutyKey !== dutyKey;
 
   const redirected = useRef(false);
   useEffect(() => {
@@ -86,20 +133,41 @@ export default function NewReportPage() {
   const stepThreeComplete = care.trim() !== "" && signature !== null;
 
   const submit = async () => {
-    if (!signature) return;
+    if (!signature || online === null) return;
     setBusy(true);
     try {
-      const signaturePath = await uploadSignature(userId, reportId.current, signature);
-      await submitReport({
-        id: reportId.current,
+      const flow = getReportFlow(online);
+      const recordedAt = new Date().toISOString();
+
+      await flow.createPatient({
+        patientId: patientId.current,
+        eventId: duty.id,
+        patientName: patient.patient_name,
+        studentId: null,
+        age: patient.patient_age,
+        sex: patient.patient_sex,
+        address: patient.patient_address,
+        addedBy: userId,
+        recordedAt,
+      });
+      await flow.createReport({
+        patientReportId: reportId.current,
+        patientId: patientId.current,
+        chiefComplaint: patient.chief_complaint,
+        careGiven: care,
+        signatureDataUrl: signature,
+        reportedBy: userId,
+        recordedAt,
+      });
+      await flow.addVitals({
+        patientReportId: reportId.current,
         eventId: duty.id,
         eventDate: duty.date,
-        ...patient,
         vitals: vitals.filter(hasMeasurements), // blank checks aren't saved
-        care_given: care,
-        signaturePath,
       });
-      toast({ title: "Report submitted" });
+
+      setSavedOffline(flow.mode === "offline");
+      toast({ title: flow.mode === "online" ? "Report submitted" : "Report saved on this device" });
       setSubmitted(true);
     } catch (e) {
       toast({
@@ -118,15 +186,22 @@ export default function NewReportPage() {
         <span className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
           <CheckCircle2 className="h-8 w-8" />
         </span>
-        <h1 className="mt-5 font-heading text-2xl font-bold tracking-tight">Report submitted</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Coming back to your home dashboard…</p>
+        <h1 className="mt-5 font-heading text-2xl font-bold tracking-tight">
+          {savedOffline ? "Report saved on this device" : "Report submitted"}
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {savedOffline ? "It will sync when you're back online. Returning…" : "Coming back to your home dashboard…"}
+        </p>
       </div>
     );
   }
 
   return (
     <div>
-      <PageHeader title="New Report" description={`${duty.title} · ${fmtTime(duty.time)}`} />
+      <PageHeader
+        title="New Report"
+        description={`${duty.title} · ${duty.time ? fmtTime(duty.time) : fmtDate(duty.date)}`}
+      />
 
       <div className="mb-5">
         <StepIndicator step={step} />

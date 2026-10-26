@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Select,
@@ -14,29 +14,55 @@ import ReportCardList from "@/components/ReportCardList";
 import LoadingState from "@/components/LoadingState";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/lib/useData";
-import { listReports } from "@/lib/data/reports";
-import type { ReportStatus } from "@/types/domain";
+import { checkConnection } from "@/lib/connectivity";
+import { getReportHistorySource, type ReportStatusFilter } from "@/lib/report-history";
 
-type StatusFilter = "all" | ReportStatus;
+type StatusFilter = ReportStatusFilter;
 
 export default function MyReportsPage() {
   const { user } = useAuth();
   const userId = user?.id;
   const router = useRouter();
   const [status, setStatus] = useState<StatusFilter>("all");
+  const [online, setOnline] = useState<boolean | null>(null);
 
-  const { data: reports, loading, error } = useData(
+  useEffect(() => {
+    let cancelled = false;
+
+    const apply = (reachable: boolean) => {
+      if (!cancelled) setOnline(reachable);
+    };
+
+    const refresh = async () => {
+      apply(await checkConnection());
+    };
+
+    void refresh();
+    const onOnline = () => void refresh();
+    const onOffline = () => apply(false);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, []);
+
+  const {
+    data: reports,
+    loading: queryLoading,
+    error,
+  } = useData(
     () =>
-      userId
-        ? listReports({
-            charterId: userId,
-            status: status === "all" ? undefined : status,
-            includeDrafts: true,
-            limit: 100,
-          })
+      userId && online !== null
+        ? getReportHistorySource(online).listReports(userId, status)
         : Promise.resolve([]),
-    [userId, status]
+    [userId, status, online]
   );
+
+  const loading = online === null || queryLoading;
 
   return (
     <div>
@@ -60,7 +86,7 @@ export default function MyReportsPage() {
 
       {error && <p className="mb-4 text-sm text-destructive">Couldn&apos;t load reports: {error}</p>}
 
-      {!reports && loading ? (
+      {online === null || (loading && !reports?.length) ? (
         <LoadingState />
       ) : (
         <ReportCardList
