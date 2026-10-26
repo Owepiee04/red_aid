@@ -11,6 +11,7 @@ import EventCard from "@/components/EventCard";
 import ReportCardList from "@/components/ReportCardList";
 import LoadingState from "@/components/LoadingState";
 import EmptyState from "@/components/EmptyState";
+import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/lib/useData";
 import { chartingClosesAt, isChartingOpen } from "@/lib/duty";
@@ -19,13 +20,16 @@ import { checkConnection } from "@/lib/connectivity";
 import { listMyEvents, todaysDutyFrom } from "@/lib/data/events";
 import { listReports } from "@/lib/data/reports";
 import { cacheMyEvents, getCachedMyEvents } from "@/lib/indexed-db/cacheEvents";
+import { hasUnsyncedData, sync } from "@/lib/indexed-db/sync";
 import { getReportHistorySource } from "@/lib/report-history";
 
 export default function CharterHomePage() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const router = useRouter();
   const userId = user?.id;
   const [online, setOnline] = useState<boolean | null>(null);
+  const syncing = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,7 +60,7 @@ export default function CharterHomePage() {
   homeKeyRef.current = homeKey;
   const [loadedHomeKey, setLoadedHomeKey] = useState<string | null>(null);
 
-  const { data, loading, error } = useData(async () => {
+  const { data, loading, error, load } = useData(async () => {
     if (!homeKey || !userId || online === null) return null;
     try {
       const today = todayISO();
@@ -87,6 +91,46 @@ export default function CharterHomePage() {
       if (homeKeyRef.current === homeKey) setLoadedHomeKey(homeKey);
     }
   }, [homeKey, userId, online]);
+
+  useEffect(() => {
+    if (!userId || online !== true || syncing.current) return;
+    syncing.current = true;
+
+    const run = async () => {
+      try {
+        if (!(await hasUnsyncedData())) return;
+
+        toast({
+          title: "User is back online, now syncing offline reports.",
+          duration: 4000,
+        });
+
+        const result = await sync();
+
+        if (result.failed > 0) {
+          toast({
+            variant: "destructive",
+            title: "Some offline reports couldn't sync.",
+            description: result.errors[0],
+          });
+        } else if (result.synced > 0) {
+          toast({ title: "Offline reports synced." });
+        }
+
+        await load();
+      } catch (error) {
+        toast({
+          variant: "destructive",
+          title: "Couldn't sync offline reports.",
+          description: error instanceof Error ? error.message : "Please try again.",
+        });
+      } finally {
+        syncing.current = false;
+      }
+    };
+
+    void run();
+  }, [userId, online, load, toast]);
 
   const pageLoading = homeKey === null || loading || loadedHomeKey !== homeKey;
 
