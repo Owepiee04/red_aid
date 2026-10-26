@@ -102,9 +102,11 @@ export default function NewReportPage() {
     vitals.every((v) => !hasMeasurements(v));
 
   useEffect(() => {
-    if (!draftReady || !userId || !duty || submitted || pristine) return;
+    if (!draftReady || !userId || !duty || submitted) return;
     const timer = setTimeout(() => {
-      void saveDraft({ userId, eventId: duty.id, reportId: reportId.current, step, patient, vitals, care });
+      // An emptied form shouldn't come back next time.
+      if (pristine) void clearDraft(userId);
+      else void saveDraft({ userId, eventId: duty.id, reportId: reportId.current, step, patient, vitals, care });
     }, 400);
     return () => clearTimeout(timer);
   }, [draftReady, userId, duty, submitted, pristine, step, patient, vitals, care]);
@@ -192,7 +194,7 @@ export default function NewReportPage() {
         </h1>
         <p className="mt-2 max-w-sm text-sm text-muted-foreground">
           {queued
-            ? "There's no signal, so the report will send automatically when you're back online. You'll see it under “Waiting to send” on Home until then."
+            ? "RedAid couldn't reach the server (no or weak signal), so the report will send automatically when the signal is back. You'll see it under “Waiting to send” on Home until then."
             : "Coming back to your home dashboard…"}
         </p>
         {queued && (

@@ -13,7 +13,7 @@
  * Screens: src/components/offline/*.
  */
 export { OFFLINE_MODE_ENABLED } from "./config";
-export { submitOrQueue, listQueued, countQueued, deleteQueued, syncQueued, onOutboxChange } from "./outbox";
+export { submitOrQueue, listQueued, countQueued, deleteQueued, syncQueued, onOutboxChange, onReportSent } from "./outbox";
 export type { SubmitOutcome } from "./outbox";
 export { saveDraft, loadDraft, clearDraft } from "./drafts";
 export { loadTodaysDuty, tryOnline } from "./duty";

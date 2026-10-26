@@ -18,7 +18,7 @@ import { chartingClosesAt, isChartingOpen } from "@/lib/duty";
 import { fmtDate, fmtTime, todayISO } from "@/lib/formatting";
 import { listMyEvents } from "@/lib/data/events";
 import { listReports } from "@/lib/data/reports";
-import { loadTodaysDuty, onOutboxChange, tryOnline } from "@/lib/offline";
+import { loadTodaysDuty, onReportSent, tryOnline } from "@/lib/offline";
 
 export default function CharterHomePage() {
   const { user } = useAuth();
@@ -44,7 +44,7 @@ export default function CharterHomePage() {
       if (navigator.onLine) void load();
     };
     window.addEventListener("online", reloadIfOnline);
-    const stop = onOutboxChange(reloadIfOnline);
+    const stop = onReportSent(reloadIfOnline);
     return () => {
       window.removeEventListener("online", reloadIfOnline);
       stop();

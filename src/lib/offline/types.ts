@@ -22,6 +22,8 @@ export interface QueuedReport {
   input: QueuedReportInput;
   /** The signature as a PNG data URL (uploaded to Storage when sent). */
   signature: string;
+  /** Set once the signature is in Storage, so a retry doesn't upload it again. */
+  signaturePath?: string | null;
   /** When the charter tapped Submit (ISO). */
   savedAt: string;
   attempts: number;

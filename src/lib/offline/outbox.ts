@@ -23,6 +23,7 @@ import type { QueuedReport, QueuedReportInput } from "./types";
 // ---------------------------------------------------------------------------
 
 const CHANGE_EVENT = "redaid:outbox-change";
+const SENT_EVENT = "redaid:outbox-sent";
 
 function emitChange() {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(CHANGE_EVENT));
@@ -32,6 +33,12 @@ function emitChange() {
 export function onOutboxChange(listener: () => void): () => void {
   window.addEventListener(CHANGE_EVENT, listener);
   return () => window.removeEventListener(CHANGE_EVENT, listener);
+}
+
+/** Calls `listener` when a saved report reaches the server (e.g. to refresh a list). Returns unsubscribe. */
+export function onReportSent(listener: () => void): () => void {
+  window.addEventListener(SENT_EVENT, listener);
+  return () => window.removeEventListener(SENT_EVENT, listener);
 }
 
 // ---------------------------------------------------------------------------
@@ -67,10 +74,16 @@ function explain(error: Error): string {
 
 async function sendOne(item: QueuedReport): Promise<SendResult> {
   try {
-    const signaturePath = await uploadSignature(item.userId, item.id, item.signature);
+    let signaturePath = item.signaturePath;
+    if (!signaturePath) {
+      signaturePath = await uploadSignature(item.userId, item.id, item.signature);
+      // Remember it: if the next step fails, the retry won't upload the picture again.
+      await store.putQueuedReport({ ...item, signaturePath }).catch(() => undefined);
+    }
     await submitReport({ ...item.input, signaturePath });
     await store.deleteQueuedReport(item.id);
     emitChange();
+    window.dispatchEvent(new Event(SENT_EVENT));
     return { kind: "sent" };
   } catch (e) {
     const error = e instanceof Error ? e : new Error(String(e));
@@ -138,7 +151,16 @@ export async function submitOrQueue(report: NewReport): Promise<SubmitOutcome> {
   // 1. Save it on the phone first, so nothing is lost if the send fails or the app closes.
   try {
     const existing = await store.getQueuedReport(item.id);
-    await store.putQueuedReport(existing ? { ...existing, input: item.input, signature: item.signature } : item);
+    await store.putQueuedReport(
+      existing
+        ? {
+            ...existing,
+            input: item.input,
+            signature: item.signature,
+            signaturePath: existing.signature === item.signature ? existing.signaturePath : null,
+          }
+        : item
+    );
     emitChange();
     void store.requestPersistentStorage();
   } catch {
