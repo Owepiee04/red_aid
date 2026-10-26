@@ -204,13 +204,18 @@ export async function listMyEvents({
     .slice(0, limit);
 }
 
+export function todaysDutyFrom(events: MyEvent[], today: string): MyEvent | null {
+  const todays = events.filter((event) => event.date === today);
+  return todays.find((event) => isChartingOpen(event)) ?? todays.find((event) => event.verified) ?? todays[0] ?? null;
+}
+
 export async function getTodaysDuty(
   userId: string,
   today: string,
   dutyRole: DutyRole = "charter"
 ): Promise<MyEvent | null> {
   const events = await listMyEvents({ userId, dutyRole, from: today, to: today, limit: 5 });
-  return events.find((e) => isChartingOpen(e)) ?? events.find((e) => e.verified) ?? events[0] ?? null;
+  return todaysDutyFrom(events, today);
 }
 
 export async function setCharterVerified(eventId: string, userId: string, verified: boolean): Promise<void> {

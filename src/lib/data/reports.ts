@@ -8,9 +8,11 @@ import {
   type PatientReportWithRelations,
 } from "@/lib/data/patientReports";
 import { addReportNote } from "@/lib/data/reportNotes";
-import { AGE_MAX, VITAL_RULES, checkVitalsRow, type VitalField } from "@/lib/vitals";
+import { parseAge, parseVitalRows } from "@/lib/report-flow/parse";
+import type { VitalFormRow } from "@/lib/report-flow/types";
 
 export type { Report, ReportStatus, VitalsReading };
+export type { VitalFormRow };
 
 function localDate(iso: string): string {
   const d = new Date(iso);
@@ -176,17 +178,6 @@ export async function saveAdminNotes(id: string, notes: string): Promise<void> {
 // Charter: submitting a report
 // ---------------------------------------------------------------------------
 
-/** One row of the vitals form. Everything is a string because it comes from inputs. */
-export interface VitalFormRow {
-  time: string; // "HH:MM"
-  temp: string;
-  pr: string;
-  rr: string;
-  bp_sys: string;
-  bp_dia: string;
-  spo2: string;
-}
-
 export interface SubmitReportInput {
   id: string; // generated once per form, so a retry can't create a duplicate
   eventId: string;
@@ -201,42 +192,9 @@ export interface SubmitReportInput {
   signaturePath: string;
 }
 
-function parseNumber(value: string, label: string, opts: { int?: boolean } = {}): number | null {
-  const text = value.trim().replace(",", ".");
-  if (text === "") return null;
-  const n = Number(text);
-  if (!Number.isFinite(n) || (opts.int && !Number.isInteger(n))) {
-    throw new Error(`${label} must be a ${opts.int ? "whole " : ""}number (you entered "${value}").`);
-  }
-  return n;
-}
-
-
 export async function submitReport(input: SubmitReportInput): Promise<string> {
-  const age = parseNumber(input.patient_age, "Age", { int: true });
-  if (age === null) throw new Error("Age is required.");
-  if (age < 0 || age > AGE_MAX) throw new Error(`Age must be 0–${AGE_MAX}.`);
-
-  const vitals = input.vitals.map((v, i) => {
-    const where = `Vitals check ${i + 1}`;
-    // Same checks the form shows, in case anything slips past the screen.
-    const problem = Object.entries(checkVitalsRow(v)).find(([, check]) => check?.error);
-    if (problem) {
-      const [field, check] = problem;
-      throw new Error(`${where} ${VITAL_RULES[field as VitalField].label.toLowerCase()}: ${check?.error}`);
-    }
-    const taken = new Date(`${input.eventDate}T${v.time}`);
-    if (Number.isNaN(taken.getTime())) throw new Error(`${where}: the time isn't valid.`);
-    return {
-      created_at: taken.toISOString(),
-      temperature: parseNumber(v.temp, `${where} temperature`),
-      pulse_rate_per_minute: parseNumber(v.pr, `${where} pulse rate`, { int: true }),
-      respiration_rate_per_minute: parseNumber(v.rr, `${where} respiratory rate`, { int: true }),
-      blood_pressure_systolic: parseNumber(v.bp_sys, `${where} systolic BP`, { int: true }),
-      blood_pressure_diastolic: parseNumber(v.bp_dia, `${where} diastolic BP`, { int: true }),
-      oxygen_level: parseNumber(v.spo2, `${where} SpO₂`, { int: true }),
-    };
-  });
+  const age = parseAge(input.patient_age);
+  const vitals = parseVitalRows(input.eventDate, input.vitals);
 
   // The database refuses new charting when the charter isn't verified, or the duty
   // was ended more than CHARTING_GRACE_MINUTES ago; say that instead of "row-level security".
